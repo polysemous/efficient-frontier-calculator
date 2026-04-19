@@ -113,6 +113,28 @@ html, body {
 .chart-header { padding: 0 18px 14px; flex-wrap: wrap; }
 .panel-title, .insight-title { font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-3); margin: 0; }
 
+.tab-switch {
+  display: inline-flex;
+  gap: 8px;
+  padding: 4px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+.tab-button {
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  padding: 10px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 700;
+}
+.tab-button.active {
+  background: linear-gradient(90deg, rgba(34,211,238,0.16), rgba(52,211,153,0.18));
+  color: var(--text-0);
+}
+
 .toolbar-row { display: flex; gap: 14px; align-items: stretch; margin-bottom: 18px; flex-wrap: wrap; }
 .count-stepper {
   display: flex;
@@ -124,6 +146,7 @@ html, body {
   padding: 14px 16px;
   min-width: 220px;
 }
+.compact-stepper { min-width: 190px; }
 .stepper-controls { display: flex; align-items: center; gap: 10px; }
 .stepper-button {
   width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--border-strong); background: rgba(255,255,255,0.04); color: var(--text-0); font-size: 20px; cursor: pointer;
@@ -171,6 +194,20 @@ html, body {
 .mode-button { border: none; background: transparent; color: var(--text-2); padding: 9px 14px; border-radius: 999px; cursor: pointer; font-weight: 600; }
 .mode-button.active { background: linear-gradient(90deg, rgba(34,211,238,0.16), rgba(52,211,153,0.18)); color: var(--text-0); }
 .finder-input-row { margin-top: 18px; }
+.advisor-grid { display: grid; grid-template-columns: minmax(240px, 1fr) 220px; gap: 14px; align-items: start; }
+@media (max-width: 760px) { .advisor-grid { grid-template-columns: 1fr; } }
+.filter-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 18px; }
+.filter-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  color: var(--text-1);
+}
+.filter-card input { accent-color: var(--accent-2); }
 .finder-summary { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
 .summary-chip, .status-pill { display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11px; padding: 7px 10px; border-radius: 999px; }
 .summary-chip { background: rgba(255,255,255,0.04); color: var(--text-2); border: 1px solid var(--border); }
