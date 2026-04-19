@@ -6,7 +6,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "server": "node server.js"
+    "server": "node server.js",
+    "dev:all": "concurrently -n BACKEND,FRONTEND -c green,blue \"npm run server\" \"npm run dev\""
   },
   "dependencies": {
     "dotenv": "^16.4.5",
@@ -17,6 +18,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.0.0",
+    "concurrently": "^9.2.1",
     "vite": "^5.0.0"
   }
 }
