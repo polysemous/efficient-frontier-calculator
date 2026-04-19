@@ -10,13 +10,9 @@ import {
   YAxis
 } from 'recharts';
 import assetData from '../data/2025-usd/assets.json';
+import assetOrder from '../data/2025-usd/asset-order.json';
 import datasetMetadata from '../data/2025-usd/metadata.json';
-
-const correlationData = {
-  'AC World Equity': { 'U.S. Aggregate Bonds': 0.29, 'U.S. Large Cap': 0.96, Gold: 0.11 },
-  'U.S. Large Cap': { 'U.S. Aggregate Bonds': 0.26, Gold: 0.04 },
-  'U.S. Aggregate Bonds': { Gold: 0.39 }
-};
+import correlationRowsText from '../data/2025-usd/correlation-rows.txt?raw';
 
 const defaultSelection = ['U.S. Large Cap', 'U.S. Aggregate Bonds', 'Gold'];
 const assetNames = Object.keys(assetData).sort((a, b) => a.localeCompare(b));
@@ -24,12 +20,59 @@ const assetNames = Object.keys(assetData).sort((a, b) => a.localeCompare(b));
 const getDisplayedReturn = (assetName) => assetData[assetName].compoundReturn2024;
 const getDisplayedVolatility = (assetName) => assetData[assetName].volatility;
 
+const buildCorrelationMatrix = () => {
+  const rows = correlationRowsText
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => {
+      const [assetName, valuesText] = line.split('|');
+      return {
+        assetName,
+        values: valuesText.split(',').map((value) => Number(value))
+      };
+    });
+
+  const rowLookup = new Map(rows.map((row) => [row.assetName, row.values]));
+  const matrix = {};
+
+  assetOrder.forEach((assetName, assetIndex) => {
+    const values = rowLookup.get(assetName);
+    if (!values) {
+      throw new Error(`Missing correlation row for ${assetName}`);
+    }
+
+    if (values.length !== assetIndex + 1) {
+      throw new Error(
+        `Correlation row length mismatch for ${assetName}: expected ${assetIndex + 1}, got ${values.length}`
+      );
+    }
+
+    matrix[assetName] = matrix[assetName] ?? {};
+
+    values.forEach((value, valueIndex) => {
+      const otherAsset = assetOrder[valueIndex];
+      matrix[assetName][otherAsset] = value;
+      matrix[otherAsset] = matrix[otherAsset] ?? {};
+      matrix[otherAsset][assetName] = value;
+    });
+  });
+
+  return matrix;
+};
+
+const correlationMatrix = buildCorrelationMatrix();
+
 const EfficientFrontierApp = () => {
   const [selected, setSelected] = useState(defaultSelection);
 
   const getCorr = (a, b) => {
     if (a === b) return 1;
-    return correlationData[a]?.[b] ?? correlationData[b]?.[a] ?? 0.3;
+    const value = correlationMatrix[a]?.[b];
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+      throw new Error(`Missing correlation: ${a} vs ${b}`);
+    }
+    return value;
   };
 
   const portfolios = useMemo(() => {
@@ -79,9 +122,12 @@ const EfficientFrontierApp = () => {
     <div className="min-h-screen w-full bg-slate-50 p-4">
       <div className="mx-auto max-w-6xl rounded-lg bg-white p-6 shadow">
         <h1 className="mb-2 text-center text-2xl font-bold">Efficient Frontier Calculator</h1>
-        <p className="mb-6 text-center text-sm text-slate-600">
+        <p className="mb-2 text-center text-sm text-slate-600">
           Dataset: {datasetMetadata.datasetName} ({datasetMetadata.currency}) · Vintage:{' '}
           {datasetMetadata.assumptionVintage}
+        </p>
+        <p className="mb-6 text-center text-xs text-slate-500">
+          Full U.S. dollar correlation matrix loaded from versioned LTCMA source data.
         </p>
 
         <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -143,12 +189,12 @@ const EfficientFrontierApp = () => {
             </div>
           </div>
 
-          <div className="rounded border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-            <h3 className="mb-2 font-semibold">Implementation note</h3>
+          <div className="rounded border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+            <h3 className="mb-2 font-semibold">Implementation status</h3>
             <p>
-              Asset returns and volatilities now come from the versioned 2025 USD LTCMA dataset in
-              this repository. Correlation coverage is still partial, so undefined asset pairs continue
-              to fall back to a placeholder correlation of 0.30 until the full matrix is checked in.
+              Asset returns, volatilities, and pairwise correlations now come from the checked-in
+              2025 USD LTCMA dataset. The app no longer uses the placeholder 0.30 correlation
+              fallback.
             </p>
           </div>
         </div>
