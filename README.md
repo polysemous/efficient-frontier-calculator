@@ -1,43 +1,91 @@
 # Efficient Frontier Calculator
 
-A simple React-based application for visualizing a three-asset portfolio opportunity set using Modern Portfolio Theory concepts.
+A React-based application for visualizing portfolio optimization using Modern Portfolio Theory.
 
-## Features
-- Select 3 asset classes
-- Visualize risk vs. return
-- Compute portfolio combinations across a 3-asset weight grid
-- Interactive chart using Recharts
+## New: Ticker Mode (Backend Required)
 
-## Tech Stack
-- React
-- Vite
-- Recharts
+This project now includes a **secure backend proxy** for market data.
 
-## Getting Started
+### Why?
+- API keys are **never exposed in the browser**
+- Data is **cached locally (30 days)** to reduce API usage
+
+---
+
+## Setup
+
+### 1. Install dependencies
 
 ```bash
 npm install
+```
+
+### 2. Add your API key
+
+Create:
+
+```bash
+.env.local
+```
+
+Add:
+
+```bash
+ALPHA_VANTAGE_API_KEY=your_key_here
+```
+
+### 3. Run backend
+
+```bash
+npm run server
+```
+
+### 4. Run frontend
+
+```bash
 npm run dev
 ```
 
+---
+
+## API Endpoints
+
+### Health check
+```
+GET /api/health
+```
+
+### Fetch ticker data
+```
+GET /api/ticker/:symbol
+```
+
+Response includes:
+- data source (cache or api)
+- last updated timestamp
+- next refresh timestamp (30-day TTL)
+
+---
+
+## Caching Strategy (Ticker Update)
+
+- Data cached locally in `.cache/`
+- Cache TTL: **30 days**
+- Re-fetch only when stale
+
+---
+
+## Existing Features
+- Efficient frontier visualization
+- Build-your-own portfolio mode
+- Advisor-driven portfolio mode
+
+---
+
 ## Data Source
-The hardcoded asset assumptions in this prototype were derived from:
+J.P. Morgan Asset Management, 2025 Long-Term Capital Market Assumptions
 
-J.P. Morgan Asset Management, 2025 Long-Term Capital Market Assumptions  
-Section: 2025 Estimates and correlations | U.S. dollar assumptions  
-Source date: as of September 30, 2024
+---
 
-See docs/SOURCE_DATA.md for full provenance and implementation notes.
-
-## Important Caveats
-- The current app is a prototype and does not yet include the full correlation matrix from the J.P. Morgan report.
-- Only a subset of asset classes and pairwise correlations are currently hardcoded.
-- For asset pairs not explicitly defined in the app, the code falls back to a placeholder correlation assumption.
-- The chart currently displays a cloud of feasible portfolio combinations for three selected assets; it does not yet isolate the mathematically efficient frontier.
-
-## Future Improvements
-- Add the full correlation matrix from the source report
-- Move source assumptions into structured data files
-- Implement true frontier extraction / optimization
-- Add Sharpe ratio, minimum-variance, and tangent portfolio views
-- Add report citation details and reproducible data-import workflow
+## Next Step
+Integrate ticker data into frontend and compute return/vol/covariance dynamically.
