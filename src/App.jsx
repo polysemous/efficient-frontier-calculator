@@ -305,7 +305,7 @@ const EfficientFrontierApp = () => {
       targetValue: advisorTarget,
       limit: 10
     });
-  }, [advisorFinderResults, advisorMode, advisorOptimizedSet.portfolios, advisorTarget]);
+  }, [advisorMode, advisorOptimizedSet.portfolios, advisorTarget]);
 
   const currentSet = activeTab === 'build' ? buildOptimizedSet : advisorOptimizedSet;
   const currentFinderResults = activeTab === 'build' ? buildFinderResults : advisorFinderResults;
