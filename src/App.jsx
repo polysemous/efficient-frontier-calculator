@@ -53,22 +53,14 @@ const buildInitialSelection = (count) => {
   return seed;
 };
 
-const CustomTooltip = ({ active, payload }) => {
-  if (!active || !payload || payload.length === 0) return null;
-  const point = payload[0]?.payload;
-  if (!point) return null;
+const CloudDot = ({ cx, cy }) => {
+  if (cx == null || cy == null) return null;
+  return <circle cx={cx} cy={cy} r={2.1} fill="#3b4a7a" opacity={0.45} />;
+};
 
-  return (
-    <div className="tooltip-card">
-      <div className="tooltip-label">{point.label ?? 'Portfolio'}</div>
-      <div className="tooltip-row"><span>Return</span><span>{fmtPct(point.return)}</span></div>
-      <div className="tooltip-row"><span>Risk</span><span>{fmtPct(point.risk)}</span></div>
-      {typeof point.sharpe === 'number' && Number.isFinite(point.sharpe) ? (
-        <div className="tooltip-row"><span>Sharpe</span><span>{fmtNum(point.sharpe)}</span></div>
-      ) : null}
-      {point.weightLabel ? <div className="tooltip-weights">{point.weightLabel}</div> : null}
-    </div>
-  );
+const FrontierDot = ({ cx, cy }) => {
+  if (cx == null || cy == null) return null;
+  return <circle cx={cx} cy={cy} r={3} fill="#34d399" stroke="#0b1020" strokeWidth={1} />;
 };
 
 const SharpeShape = ({ cx, cy }) => {
@@ -124,14 +116,22 @@ const RiskFreeShape = ({ cx, cy }) => {
   );
 };
 
-const FrontierDot = ({ cx, cy }) => {
-  if (cx == null || cy == null) return null;
-  return <circle cx={cx} cy={cy} r={3} fill="#34d399" stroke="#0b1020" strokeWidth={1} />;
-};
+const CustomTooltip = ({ active, payload }) => {
+  if (!active || !payload || payload.length === 0) return null;
+  const point = payload[0]?.payload;
+  if (!point) return null;
 
-const CloudDot = ({ cx, cy }) => {
-  if (cx == null || cy == null) return null;
-  return <circle cx={cx} cy={cy} r={2.1} fill="#3b4a7a" opacity={0.45} />;
+  return (
+    <div className="tooltip-card">
+      <div className="tooltip-label">{point.label ?? 'Portfolio'}</div>
+      <div className="tooltip-row"><span>Return</span><span>{fmtPct(point.return)}</span></div>
+      <div className="tooltip-row"><span>Risk</span><span>{fmtPct(point.risk)}</span></div>
+      {typeof point.sharpe === 'number' && Number.isFinite(point.sharpe) ? (
+        <div className="tooltip-row"><span>Sharpe</span><span>{fmtNum(point.sharpe)}</span></div>
+      ) : null}
+      {point.fullWeightLabel ? <div className="tooltip-weights">{point.fullWeightLabel}</div> : null}
+    </div>
+  );
 };
 
 const Donut = ({ segments, centerTop, centerBottom }) => {
@@ -209,7 +209,7 @@ const EfficientFrontierApp = () => {
     });
   };
 
-  const analysis = useMemo(() => {
+  const optimizedSet = useMemo(() => {
     const activeAssets = selected.slice(0, assetCount);
     const sampleCount = chooseSampleCount(activeAssets.length);
     const portfolios = generatePortfolioSet({
@@ -225,13 +225,6 @@ const EfficientFrontierApp = () => {
     const minVariance = sortedByRisk[0] ? [{ ...sortedByRisk[0], label: 'Minimum variance portfolio' }] : [];
     const maxSharpePoint = [...portfolios].sort((a, b) => b.sharpe - a.sharpe)[0];
     const maxSharpe = maxSharpePoint ? [{ ...maxSharpePoint, label: 'Maximum Sharpe portfolio' }] : [];
-    const solutions = findPortfolioSolutions({
-      portfolios,
-      mode: finderMode,
-      targetValue: finderTarget,
-      limit: 10
-    });
-    const finderResult = solutions.feasible[0] ?? solutions.fallback[0] ?? null;
 
     return {
       activeAssets,
@@ -239,22 +232,28 @@ const EfficientFrontierApp = () => {
       portfolios,
       frontier,
       minVariance,
-      maxSharpe,
-      finderResult,
-      feasibleSolutions: solutions.feasible,
-      fallbackSolutions: solutions.fallback
+      maxSharpe
     };
-  }, [assetCount, finderMode, finderTarget, riskFreeRateValue, selected]);
+  }, [assetCount, riskFreeRateValue, selected]);
 
-  const ms = analysis.maxSharpe[0];
-  const mv = analysis.minVariance[0];
-  const recommendation = analysis.finderResult;
-  const visibleSolutions = analysis.feasibleSolutions.length > 0 ? analysis.feasibleSolutions : analysis.fallbackSolutions;
-  const frontierReturns = analysis.frontier.map((point) => point.return);
+  const finderResults = useMemo(() => {
+    return findPortfolioSolutions({
+      portfolios: optimizedSet.portfolios,
+      mode: finderMode,
+      targetValue: finderTarget,
+      limit: 10
+    });
+  }, [finderMode, finderTarget, optimizedSet.portfolios]);
+
+  const recommendation = finderResults.feasible[0] ?? finderResults.fallback[0] ?? null;
+  const visibleSolutions = finderResults.feasible.length > 0 ? finderResults.feasible : finderResults.fallback;
+  const ms = optimizedSet.maxSharpe[0];
+  const mv = optimizedSet.minVariance[0];
+  const frontierReturns = optimizedSet.frontier.map((point) => point.return);
   const frontierLow = frontierReturns.length ? Math.min(...frontierReturns) : 0;
   const frontierHigh = frontierReturns.length ? Math.max(...frontierReturns) : 0;
 
-  const selectedAssets = analysis.activeAssets.map((name, index) => ({
+  const selectedAssets = optimizedSet.activeAssets.map((name, index) => ({
     name,
     return: getDisplayedReturn(name),
     risk: getDisplayedVolatility(name),
@@ -263,12 +262,11 @@ const EfficientFrontierApp = () => {
   }));
 
   const basePoints = [
-    ...analysis.portfolios,
+    ...optimizedSet.portfolios,
     ...selectedAssets.map((point) => ({ risk: point.risk, return: point.return })),
     { risk: 0, return: riskFreeRateValue },
     ...(recommendation ? [recommendation] : [])
   ];
-  const xMin = 0;
   const xMax = Math.ceil(Math.max(...basePoints.map((point) => point.risk)) + 1);
 
   const capitalMarketLine = ms && ms.risk > 0
@@ -287,10 +285,17 @@ const EfficientFrontierApp = () => {
   const yMin = Math.floor(Math.min(...allYs) - 0.5);
   const yMax = Math.ceil(Math.max(...allYs) + 0.5);
 
-  const recommendationPoint = recommendation ? [{ ...recommendation, label: analysis.feasibleSolutions.length ? 'Suggested portfolio' : 'Nearest portfolio' }] : [];
+  const recommendationPoint = recommendation
+    ? [{ ...recommendation, label: finderResults.feasible.length ? 'Suggested portfolio' : 'Nearest portfolio' }]
+    : [];
+
+  const displayCloud = useMemo(() => {
+    const step = optimizedSet.portfolios.length > 7000 ? 3 : optimizedSet.portfolios.length > 4500 ? 2 : 1;
+    return optimizedSet.portfolios.filter((_, index) => index % step === 0);
+  }, [optimizedSet.portfolios]);
 
   const donutSegments = (point) =>
-    analysis.activeAssets.map((name, index) => ({
+    optimizedSet.activeAssets.map((name, index) => ({
       name,
       value: point.weightPct[index],
       color: slotColors[index % slotColors.length]
@@ -326,18 +331,20 @@ const EfficientFrontierApp = () => {
           <div className="kpi-grid">
             <div className="kpi" style={{ '--kpi-accent': 'var(--accent-2)' }}>
               <div className="kpi-label">Assets in play</div>
-              <div className="kpi-value">{analysis.activeAssets.length}</div>
+              <div className="kpi-value">{optimizedSet.activeAssets.length}</div>
               <div className="kpi-delta">up to 10 slots</div>
             </div>
             <div className="kpi" style={{ '--kpi-accent': 'var(--accent-3)' }}>
               <div className="kpi-label">Sampled portfolios</div>
-              <div className="kpi-value">{analysis.portfolios.length}</div>
+              <div className="kpi-value">{optimizedSet.portfolios.length}</div>
               <div className="kpi-delta">Monte Carlo + anchors</div>
             </div>
             <div className="kpi" style={{ '--kpi-accent': 'var(--accent)' }}>
-              <div className="kpi-label">Finder mode</div>
-              <div className="kpi-value">{finderMode === 'requiredReturn' ? 'Return' : 'Risk'}</div>
-              <div className="kpi-delta">{analysis.feasibleSolutions.length} feasible candidates</div>
+              <div className="kpi-label">Estimated frontier range</div>
+              <div className="kpi-value">
+                {frontierReturns.length ? `${fmtPct(frontierLow, 1)} – ${fmtPct(frontierHigh, 1)}` : '—'}
+              </div>
+              <div className="kpi-delta">sampled upper envelope · not exact QP</div>
             </div>
           </div>
         </div>
@@ -346,7 +353,7 @@ const EfficientFrontierApp = () => {
           <div className="panel-header">
             <h2 className="panel-title">Asset universe</h2>
             <div className="header-meta" style={{ fontSize: 10 }}>
-              dynamic selectors · no duplicate assets · live optimization
+              dynamic selectors · swap duplicates by re-selecting · live optimization
             </div>
           </div>
 
@@ -354,16 +361,34 @@ const EfficientFrontierApp = () => {
             <div className="count-stepper">
               <span className="asset-label">Assets to include</span>
               <div className="stepper-controls">
-                <button className="stepper-button" onClick={() => handleAssetCountChange(assetCount - 1)} disabled={assetCount <= 2}>−</button>
+                <button
+                  className="stepper-button"
+                  aria-label="Decrease asset count"
+                  onClick={() => handleAssetCountChange(assetCount - 1)}
+                  disabled={assetCount <= 2}
+                >−</button>
                 <span className="stepper-value">{assetCount}</span>
-                <button className="stepper-button" onClick={() => handleAssetCountChange(assetCount + 1)} disabled={assetCount >= 10}>+</button>
+                <button
+                  className="stepper-button"
+                  aria-label="Increase asset count"
+                  onClick={() => handleAssetCountChange(assetCount + 1)}
+                  disabled={assetCount >= 10}
+                >+</button>
               </div>
             </div>
 
             <div className="rf-card compact">
               <div className="asset-label">Risk-free rate</div>
               <div className="rf-input-row">
-                <input className="rf-input" type="number" step="0.01" value={riskFreeRate} onChange={(e) => setRiskFreeRate(e.target.value)} />
+                <input
+                  className="rf-input"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="15"
+                  value={riskFreeRate}
+                  onChange={(e) => setRiskFreeRate(e.target.value)}
+                />
                 <span className="rf-suffix">%</span>
               </div>
               <div className="rf-hint">Default U.S. Cash · {defaultRiskFreeRate.toFixed(2)}%</div>
@@ -371,8 +396,8 @@ const EfficientFrontierApp = () => {
           </div>
 
           <div className="dynamic-asset-grid">
-            {analysis.activeAssets.map((assetName, index) => (
-              <div key={`${index}-${assetName}`} className="asset-card" data-slot={index % slotColors.length}>
+            {optimizedSet.activeAssets.map((assetName, index) => (
+              <div key={index} className="asset-card" data-slot={index % slotColors.length}>
                 <span className="slot-pill">ASSET {index + 1}</span>
                 <div className="asset-label">Selection</div>
                 <div className="asset-select-wrap">
@@ -381,11 +406,9 @@ const EfficientFrontierApp = () => {
                     value={assetName}
                     onChange={(event) => handleAssetSelection(index, event.target.value)}
                   >
-                    {allAssetNames
-                      .filter((name) => name === assetName || !analysis.activeAssets.includes(name))
-                      .map((name) => (
-                        <option key={name} value={name}>{name}</option>
-                      ))}
+                    {allAssetNames.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
                   </select>
                 </div>
                 <div className="asset-stats">
@@ -407,8 +430,8 @@ const EfficientFrontierApp = () => {
           <div className="panel finder-panel">
             <div className="panel-header">
               <h2 className="panel-title">Portfolio finder</h2>
-              <div className={`status-pill ${analysis.feasibleSolutions.length ? 'success' : 'warning'}`}>
-                {analysis.feasibleSolutions.length ? 'feasible solutions found' : 'showing nearest matches'}
+              <div className={`status-pill ${finderResults.feasible.length ? 'success' : 'warning'}`}>
+                {finderResults.feasible.length ? 'feasible solutions found' : 'showing nearest matches'}
               </div>
             </div>
 
@@ -430,14 +453,14 @@ const EfficientFrontierApp = () => {
                 </div>
                 <div className="rf-hint">
                   {finderMode === 'requiredReturn'
-                    ? 'Find the lowest-risk mixes that meet or exceed this return.'
-                    : 'Find the highest-return mixes that stay within this risk.'}
+                    ? 'Find the lowest-risk sampled mixes that meet or exceed this return.'
+                    : 'Find the highest-return sampled mixes that stay within this risk.'}
                 </div>
               </div>
             </div>
 
             <div className="finder-summary">
-              <div className="summary-chip">Frontier range {frontierReturns.length ? `${fmtPct(frontierLow, 1)} – ${fmtPct(frontierHigh, 1)}` : '—'}</div>
+              <div className="summary-chip">Mode {finderMode === 'requiredReturn' ? 'return target' : 'risk budget'}</div>
               <div className="summary-chip">Max Sharpe {ms ? fmtNum(ms.sharpe) : '—'}</div>
               <div className="summary-chip">Min variance {mv ? fmtPct(mv.risk, 1) : '—'}</div>
             </div>
@@ -447,7 +470,7 @@ const EfficientFrontierApp = () => {
             <div className="panel-header">
               <h2 className="panel-title">Suggested portfolio</h2>
               <div className="header-meta" style={{ fontSize: 10 }}>
-                {analysis.feasibleSolutions.length ? 'best exact fit' : 'closest available fit'}
+                {finderResults.feasible.length ? 'best exact fit' : 'closest available fit'}
               </div>
             </div>
             {recommendation ? (
@@ -455,7 +478,7 @@ const EfficientFrontierApp = () => {
                 <div className="donut-wrap">
                   <Donut segments={donutSegments(recommendation)} centerTop={finderMode === 'requiredReturn' ? fmtPct(recommendation.risk, 1) : fmtPct(recommendation.return, 1)} centerBottom={finderMode === 'requiredReturn' ? 'RISK' : 'RETURN'} />
                   <div className="donut-legend">
-                    {analysis.activeAssets.map((name, index) => (
+                    {optimizedSet.activeAssets.map((name, index) => (
                       <div className="donut-legend-row" key={name}>
                         <span className="legend-swatch" style={{ background: slotColors[index % slotColors.length] }} />
                         <span className="name">{name}</span>
@@ -478,10 +501,15 @@ const EfficientFrontierApp = () => {
 
         <div className="chart-panel">
           <div className="chart-header">
-            <h2 className="panel-title">Efficient frontier + recommendation</h2>
+            <div>
+              <h2 className="panel-title">Estimated frontier + recommendation</h2>
+              <div className="header-meta" style={{ fontSize: 10, marginTop: 8 }}>
+                sampled Monte Carlo upper envelope for client-side interactivity
+              </div>
+            </div>
             <div className="chart-legend">
               <span className="legend-item"><span className="legend-dot cloud" /> Sampled cloud</span>
-              <span className="legend-item"><span className="legend-dot frontier" /> Frontier</span>
+              <span className="legend-item"><span className="legend-dot frontier" /> Estimated frontier</span>
               <span className="legend-item"><span className="legend-dot cml" /> CML</span>
               <span className="legend-item"><span className="legend-dot sharpe" /> Max Sharpe</span>
               <span className="legend-item"><span className="legend-dot minvar" /> Min variance</span>
@@ -504,19 +532,31 @@ const EfficientFrontierApp = () => {
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="2 4" stroke="rgba(148,163,205,0.14)" />
-              <XAxis type="number" dataKey="risk" domain={[xMin, xMax]} tickFormatter={(value) => `${value}%`} stroke="rgba(148,163,205,0.4)" tickLine={false}>
+              <XAxis type="number" dataKey="risk" domain={[0, xMax]} tickFormatter={(value) => `${value}%`} stroke="rgba(148,163,205,0.4)" tickLine={false}>
                 <Label value="RISK (σ)" position="insideBottom" offset={-18} className="recharts-label" />
               </XAxis>
               <YAxis type="number" dataKey="return" domain={[yMin, yMax]} tickFormatter={(value) => `${value}%`} stroke="rgba(148,163,205,0.4)" tickLine={false}>
                 <Label value="RETURN" angle={-90} position="insideLeft" offset={10} className="recharts-label" />
               </YAxis>
               <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(148,163,205,0.25)', strokeDasharray: '2 3' }} />
-              <Scatter name="Sampled cloud" data={analysis.portfolios} shape={<CloudDot />} />
-              <Scatter name="Efficient frontier" data={analysis.frontier.map((point) => ({ ...point, label: 'Efficient frontier' }))} shape={<FrontierDot />} line={{ stroke: 'url(#frontierLine)', strokeWidth: 2.5 }} lineType="joint" />
-              <Scatter name="Capital Market Line" data={capitalMarketLine} line={{ stroke: 'url(#cmlLine)', strokeWidth: 2, strokeDasharray: '6 4' }} lineType="joint" />
+              <Scatter name="Sampled cloud" data={displayCloud} shape={<CloudDot />} />
+              <Scatter
+                name="Estimated frontier"
+                data={optimizedSet.frontier.map((point) => ({ ...point, label: 'Estimated frontier' }))}
+                shape={<FrontierDot />}
+                line={{ stroke: 'url(#frontierLine)', strokeWidth: 2.5 }}
+                lineType="joint"
+              />
+              <Scatter
+                name="Capital Market Line"
+                data={capitalMarketLine}
+                shape={() => null}
+                line={{ stroke: 'url(#cmlLine)', strokeWidth: 2, strokeDasharray: '6 4' }}
+                lineType="joint"
+              />
               <Scatter name="Risk-free rate" data={capitalMarketLine.slice(0, 1)} shape={<RiskFreeShape />} />
-              <Scatter name="Minimum variance" data={analysis.minVariance} shape={<MinVarShape />} />
-              <Scatter name="Maximum Sharpe" data={analysis.maxSharpe} shape={<SharpeShape />} />
+              <Scatter name="Minimum variance" data={optimizedSet.minVariance} shape={<MinVarShape />} />
+              <Scatter name="Maximum Sharpe" data={optimizedSet.maxSharpe} shape={<SharpeShape />} />
               <Scatter name="Finder result" data={recommendationPoint} shape={<FinderShape />} />
               <Scatter name="Selected assets" data={selectedAssets} shape={<SelectedAssetShape />} />
             </ScatterChart>
@@ -549,7 +589,7 @@ const EfficientFrontierApp = () => {
                       <td>{fmtPct(point.return)}</td>
                       <td>{fmtPct(point.risk)}</td>
                       <td>{Number.isFinite(point.sharpe) ? fmtNum(point.sharpe) : '—'}</td>
-                      <td className="weights-cell">{point.weightLabel}</td>
+                      <td className="weights-cell" title={point.fullWeightLabel}>{point.weightLabel}</td>
                     </tr>
                   ))
                 ) : (
