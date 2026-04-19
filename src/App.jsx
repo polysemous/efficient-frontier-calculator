@@ -11,6 +11,7 @@ import {
 } from 'recharts';
 import assetData from '../data/2025-usd/assets.json';
 import assetOrder from '../data/2025-usd/asset-order.json';
+import assetTaxonomy from '../data/2025-usd/asset-taxonomy.json';
 import datasetMetadata from '../data/2025-usd/metadata.json';
 import correlationRowsText from '../data/2025-usd/correlation-rows.txt?raw';
 import {
@@ -24,6 +25,8 @@ import {
 } from './lib/portfolioMath';
 
 const allAssetNames = Object.keys(assetData).sort((a, b) => a.localeCompare(b));
+const isReferenceAsset = (assetName) => assetTaxonomy[assetName]?.class === 'reference';
+const investableAssetNames = allAssetNames.filter((assetName) => !isReferenceAsset(assetName));
 const preferredDefaults = [
   'U.S. Large Cap',
   'U.S. Aggregate Bonds',
@@ -35,7 +38,7 @@ const preferredDefaults = [
   'U.S. Cash',
   'U.S. Mid Cap',
   'U.S. High Yield Bonds'
-].filter((name) => allAssetNames.includes(name));
+].filter((name) => investableAssetNames.includes(name));
 const defaultRiskFreeRate = assetData['U.S. Cash']?.compoundReturn2024 ?? 3.1;
 const slotColors = ['#34d399', '#22d3ee', '#f4c35a', '#c084fc', '#f87171', '#60a5fa', '#f97316', '#a3e635', '#f472b6', '#93c5fd'];
 const getDisplayedReturn = (assetName) => assetData[assetName].compoundReturn2024;
@@ -46,18 +49,13 @@ const correlationMatrix = buildCorrelationMatrix(assetOrder, correlationRowsText
 const fmtPct = (n, d = 2) => `${n.toFixed(d)}%`;
 const fmtNum = (n, d = 3) => n.toFixed(d);
 
-const isBondAsset = (assetName) =>
-  /(Treasur|Bond|Credit|Corporate|Muni|Debt|Loans|Securitized|TIPS|Cash|Inflation|Convertible)/i.test(assetName);
-
-const isPrivateAlternativeAsset = (assetName) =>
-  /(Private Equity|Venture Capital|Direct Lending|Commercial Mortgage Loans|Hedge Funds|Core Real Estate|Value-Added Real Estate|Core Infrastructure|Core Transport|Timberland)/i.test(assetName);
-
-const isAlternativeAsset = (assetName) =>
-  isPrivateAlternativeAsset(assetName) || /(REITs|Commodities|Gold)/i.test(assetName);
+const isBondAsset = (assetName) => assetTaxonomy[assetName]?.class === 'bond';
+const isPrivateAlternativeAsset = (assetName) => assetTaxonomy[assetName]?.class === 'alt_private';
+const isAlternativeAsset = (assetName) => ['alt_public', 'alt_private'].includes(assetTaxonomy[assetName]?.class);
 
 const buildInitialSelection = (count) => {
   const seed = [];
-  for (const candidate of [...preferredDefaults, ...allAssetNames]) {
+  for (const candidate of [...preferredDefaults, ...investableAssetNames]) {
     if (!seed.includes(candidate)) seed.push(candidate);
     if (seed.length === count) break;
   }
@@ -193,6 +191,16 @@ const summarizePortfolios = (portfolios) => {
   return { frontier, minVariance, maxSharpe };
 };
 
+const emptyPortfolioSet = (modeLabel, extra = {}) => ({
+  modeLabel,
+  sampleCount: 0,
+  portfolios: [],
+  frontier: [],
+  minVariance: [],
+  maxSharpe: [],
+  ...extra
+});
+
 const EfficientFrontierApp = () => {
   const [activeTab, setActiveTab] = useState('build');
   const [assetCount, setAssetCount] = useState(3);
@@ -216,7 +224,7 @@ const EfficientFrontierApp = () => {
     setAssetCount(safeCount);
     setSelected((previous) => {
       const next = previous.slice(0, safeCount);
-      for (const candidate of [...preferredDefaults, ...allAssetNames]) {
+      for (const candidate of [...preferredDefaults, ...investableAssetNames]) {
         if (!next.includes(candidate)) next.push(candidate);
         if (next.length === safeCount) break;
       }
@@ -239,6 +247,10 @@ const EfficientFrontierApp = () => {
 
   const buildOptimizedSet = useMemo(() => {
     const activeAssets = selected.slice(0, assetCount);
+    if (activeTab !== 'build') {
+      return emptyPortfolioSet('Build My Own', { activeAssets });
+    }
+
     const sampleCount = chooseSampleCount(activeAssets.length);
     const portfolios = generatePortfolioSet({
       selectedAssets: activeAssets,
@@ -255,7 +267,7 @@ const EfficientFrontierApp = () => {
       portfolios,
       ...summarizePortfolios(portfolios)
     };
-  }, [assetCount, riskFreeRateValue, selected]);
+  }, [activeTab, assetCount, riskFreeRateValue, selected]);
 
   const buildFinderResults = useMemo(() => {
     return findPortfolioSolutions({
@@ -267,36 +279,46 @@ const EfficientFrontierApp = () => {
   }, [buildFinderMode, buildFinderTarget, buildOptimizedSet.portfolios]);
 
   const advisorUniverse = useMemo(() => {
-    return allAssetNames.filter((assetName) => {
+    return investableAssetNames.filter((assetName) => {
       if (includeOnlyPublicMarkets && isPrivateAlternativeAsset(assetName)) return false;
       if (excludeAlternatives && isAlternativeAsset(assetName)) return false;
       return true;
     });
   }, [excludeAlternatives, includeOnlyPublicMarkets]);
 
-  const advisorOptimizedSet = useMemo(() => {
+  const advisorBondUniverse = useMemo(() => advisorUniverse.filter(isBondAsset), [advisorUniverse]);
+
+  const rawAdvisorPortfolios = useMemo(() => {
+    if (activeTab !== 'advisor') return [];
     const sampleCount = chooseAdvisorSampleCount(advisorUniverse.length, advisorMaxAssets);
-    const rawPortfolios = generateSparsePortfolioSet({
+    return generateSparsePortfolioSet({
       candidateAssets: advisorUniverse,
       maxAssetsInPortfolio: advisorMaxAssets,
       assetData,
       correlationMatrix,
       riskFreeRate: riskFreeRateValue,
-      sampleCount
+      sampleCount,
+      requiredAssetsPool: requireBond ? advisorBondUniverse : []
     });
+  }, [activeTab, advisorBondUniverse, advisorMaxAssets, advisorUniverse, requireBond, riskFreeRateValue]);
 
-    const filteredPortfolios = requireBond
-      ? rawPortfolios.filter((portfolio) => portfolio.selectedAssets.some((assetName) => isBondAsset(assetName)))
-      : rawPortfolios;
+  const advisorOptimizedSet = useMemo(() => {
+    if (activeTab !== 'advisor') {
+      return emptyPortfolioSet('Choose for Me', { candidateUniverse: advisorUniverse });
+    }
+
+    const portfolios = requireBond
+      ? rawAdvisorPortfolios.filter((portfolio) => portfolio.selectedAssets.some(isBondAsset))
+      : rawAdvisorPortfolios;
 
     return {
       modeLabel: 'Choose for Me',
       candidateUniverse: advisorUniverse,
-      sampleCount,
-      portfolios: filteredPortfolios,
-      ...summarizePortfolios(filteredPortfolios)
+      sampleCount: rawAdvisorPortfolios.length,
+      portfolios,
+      ...summarizePortfolios(portfolios)
     };
-  }, [advisorMaxAssets, advisorUniverse, requireBond, riskFreeRateValue]);
+  }, [activeTab, advisorUniverse, rawAdvisorPortfolios, requireBond]);
 
   const advisorFinderResults = useMemo(() => {
     return findPortfolioSolutions({
@@ -313,7 +335,6 @@ const EfficientFrontierApp = () => {
   const recommendation = currentFinderResults.feasible[0] ?? currentFinderResults.fallback[0] ?? null;
   const visibleSolutions = currentFinderResults.feasible.length > 0 ? currentFinderResults.feasible : currentFinderResults.fallback;
   const ms = currentSet.maxSharpe[0];
-  const mv = currentSet.minVariance[0];
   const frontierReturns = currentSet.frontier.map((point) => point.return);
   const frontierLow = frontierReturns.length ? Math.min(...frontierReturns) : 0;
   const frontierHigh = frontierReturns.length ? Math.max(...frontierReturns) : 0;
@@ -352,7 +373,7 @@ const EfficientFrontierApp = () => {
   const yMin = Math.floor((allYs.length ? Math.min(...allYs) : 0) - 0.5);
   const yMax = Math.ceil((allYs.length ? Math.max(...allYs) : 0) + 0.5);
   const recommendationPoint = recommendation
-    ? [{ ...recommendation, label: currentFinderResults.feasible.length ? 'Suggested portfolio' : 'Nearest portfolio' }]
+    ? [{ ...recommendation, label: currentFinderResults.feasible.length ? (activeTab === 'build' ? 'Finder result' : 'Advisor recommendation') : 'Nearest portfolio' }]
     : [];
 
   const displayCloud = useMemo(() => {
@@ -372,6 +393,12 @@ const EfficientFrontierApp = () => {
     excludeAlternatives ? 'alternatives excluded' : null,
     requireBond ? 'at least one bond asset' : null
   ].filter(Boolean);
+
+  const advisorEmptyMessage = advisorUniverse.length === 0
+    ? 'Your current filters remove the entire advisor universe. Try loosening one or more filters.'
+    : advisorOptimizedSet.portfolios.length === 0
+      ? 'Your current advisor constraints produced no candidate portfolios. Try lowering the target or relaxing the filters.'
+      : 'No portfolios available for the current settings.';
 
   return (
     <div className="app-shell">
@@ -404,7 +431,7 @@ const EfficientFrontierApp = () => {
             <div className="kpi" style={{ '--kpi-accent': 'var(--accent-2)' }}>
               <div className="kpi-label">Current mode</div>
               <div className="kpi-value">{currentSet.modeLabel}</div>
-              <div className="kpi-delta">{activeTab === 'build' ? `${currentSet.activeAssets.length} selected assets` : `${advisorUniverse.length} assets in candidate universe`}</div>
+              <div className="kpi-delta">{activeTab === 'build' ? `${(currentSet.activeAssets ?? []).length} selected assets` : `${advisorUniverse.length} assets in candidate universe`}</div>
             </div>
             <div className="kpi" style={{ '--kpi-accent': 'var(--accent-3)' }}>
               <div className="kpi-label">Sampled portfolios</div>
@@ -426,9 +453,19 @@ const EfficientFrontierApp = () => {
               manual universe control or advisor-led selection
             </div>
           </div>
-          <div className="tab-switch">
-            <button className={`tab-button ${activeTab === 'build' ? 'active' : ''}`} onClick={() => setActiveTab('build')}>Build My Own</button>
-            <button className={`tab-button ${activeTab === 'advisor' ? 'active' : ''}`} onClick={() => setActiveTab('advisor')}>Choose for Me</button>
+          <div className="toolbar-row">
+            <div className="tab-switch">
+              <button className={`tab-button ${activeTab === 'build' ? 'active' : ''}`} onClick={() => setActiveTab('build')}>Build My Own</button>
+              <button className={`tab-button ${activeTab === 'advisor' ? 'active' : ''}`} onClick={() => setActiveTab('advisor')}>Choose for Me</button>
+            </div>
+            <div className="rf-card compact">
+              <div className="asset-label">Risk-free rate</div>
+              <div className="rf-input-row">
+                <input className="rf-input" type="number" step="0.01" min="0" max="15" value={riskFreeRate} onChange={(e) => setRiskFreeRate(e.target.value)} />
+                <span className="rf-suffix">%</span>
+              </div>
+              <div className="rf-hint">Global across both tabs · default U.S. Cash {defaultRiskFreeRate.toFixed(2)}%</div>
+            </div>
           </div>
         </div>
 
@@ -438,7 +475,7 @@ const EfficientFrontierApp = () => {
               <div className="panel-header">
                 <h2 className="panel-title">Asset universe</h2>
                 <div className="header-meta" style={{ fontSize: 10 }}>
-                  dynamic selectors · swap duplicates by re-selecting · live optimization
+                  dynamic selectors · swap duplicates by re-selecting · reference assets excluded
                 </div>
               </div>
 
@@ -451,25 +488,16 @@ const EfficientFrontierApp = () => {
                     <button className="stepper-button" aria-label="Increase asset count" onClick={() => handleAssetCountChange(assetCount + 1)} disabled={assetCount >= 10}>+</button>
                   </div>
                 </div>
-
-                <div className="rf-card compact">
-                  <div className="asset-label">Risk-free rate</div>
-                  <div className="rf-input-row">
-                    <input className="rf-input" type="number" step="0.01" min="0" max="15" value={riskFreeRate} onChange={(e) => setRiskFreeRate(e.target.value)} />
-                    <span className="rf-suffix">%</span>
-                  </div>
-                  <div className="rf-hint">Default U.S. Cash · {defaultRiskFreeRate.toFixed(2)}%</div>
-                </div>
               </div>
 
               <div className="dynamic-asset-grid">
-                {buildOptimizedSet.activeAssets.map((assetName, index) => (
+                {(currentSet.activeAssets ?? []).map((assetName, index) => (
                   <div key={index} className="asset-card" data-slot={index % slotColors.length}>
                     <span className="slot-pill">ASSET {index + 1}</span>
                     <div className="asset-label">Selection</div>
                     <div className="asset-select-wrap">
                       <select className="asset-select" value={assetName} onChange={(event) => handleAssetSelection(index, event.target.value)}>
-                        {allAssetNames.map((name) => (
+                        {investableAssetNames.map((name) => (
                           <option key={name} value={name}>{name}</option>
                         ))}
                       </select>
@@ -583,7 +611,7 @@ const EfficientFrontierApp = () => {
 
               <div className="finder-summary">
                 <div className="summary-chip">Universe {advisorUniverse.length} assets</div>
-                <div className="summary-chip">Max assets {advisorMaxAssets}</div>
+                <div className="summary-chip">Bond assets {advisorBondUniverse.length}</div>
                 <div className="summary-chip">{advisorFilterSummary.length ? advisorFilterSummary.join(' · ') : 'no extra filters'}</div>
               </div>
             </div>
@@ -613,7 +641,7 @@ const EfficientFrontierApp = () => {
                     <div className="stat"><span className="stat-label">Sharpe</span><span className="stat-value">{Number.isFinite(recommendation.sharpe) ? fmtNum(recommendation.sharpe) : '—'}</span></div>
                   </div>
                 </>
-              ) : <div className="empty-state">Adjust the advisor constraints to generate recommendations.</div>}
+              ) : <div className="empty-state">{advisorEmptyMessage}</div>}
             </div>
           </div>
         )}
@@ -621,7 +649,7 @@ const EfficientFrontierApp = () => {
         <div className="chart-panel">
           <div className="chart-header">
             <div>
-              <h2 className="panel-title">{activeTab === 'build' ? 'Estimated frontier + recommendation' : 'Advisor search + recommendation'}</h2>
+              <h2 className="panel-title">{activeTab === 'build' ? 'Estimated frontier + finder result' : 'Advisor search + recommendation'}</h2>
               <div className="header-meta" style={{ fontSize: 10, marginTop: 8 }}>
                 sampled Monte Carlo upper envelope for client-side interactivity
               </div>
@@ -632,7 +660,7 @@ const EfficientFrontierApp = () => {
               <span className="legend-item"><span className="legend-dot cml" /> CML</span>
               <span className="legend-item"><span className="legend-dot sharpe" /> Max Sharpe</span>
               <span className="legend-item"><span className="legend-dot minvar" /> Min variance</span>
-              <span className="legend-item"><span className="legend-dot finder" /> Recommendation</span>
+              <span className="legend-item"><span className="legend-dot finder" /> {activeTab === 'build' ? 'Finder result' : 'Advisor recommendation'}</span>
               <span className="legend-item"><span className="legend-dot asset" /> Active assets</span>
             </div>
           </div>
@@ -664,7 +692,7 @@ const EfficientFrontierApp = () => {
               <Scatter name="Risk-free rate" data={capitalMarketLine.slice(0, 1)} shape={<RiskFreeShape />} />
               <Scatter name="Minimum variance" data={currentSet.minVariance} shape={<MinVarShape />} />
               <Scatter name="Maximum Sharpe" data={currentSet.maxSharpe} shape={<SharpeShape />} />
-              <Scatter name="Recommendation" data={recommendationPoint} shape={<FinderShape />} />
+              <Scatter name={activeTab === 'build' ? 'Finder result' : 'Advisor recommendation'} data={recommendationPoint} shape={<FinderShape />} />
               <Scatter name="Active assets" data={highlightedAssets} shape={<SelectedAssetShape />} />
             </ScatterChart>
           </ResponsiveContainer>
@@ -701,7 +729,7 @@ const EfficientFrontierApp = () => {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={5} className="empty-state">No portfolios available for the current settings.</td>
+                    <td colSpan={5} className="empty-state">{activeTab === 'advisor' ? advisorEmptyMessage : 'No portfolios available for the current settings.'}</td>
                   </tr>
                 )}
               </tbody>
