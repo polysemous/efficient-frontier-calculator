@@ -57,6 +57,35 @@ const randomWeights = (count, random) => {
   return raw.map((value) => value / total);
 };
 
+const roundWeightsToTenths = (weights) => {
+  const rawTenths = weights.map((value) => value * 1000);
+  const floored = rawTenths.map((value) => Math.floor(value));
+  let remaining = 1000 - floored.reduce((sum, value) => sum + value, 0);
+
+  const remainders = rawTenths
+    .map((value, index) => ({ index, remainder: value - floored[index] }))
+    .sort((a, b) => b.remainder - a.remainder);
+
+  for (let i = 0; i < remainders.length && remaining > 0; i += 1) {
+    floored[remainders[i].index] += 1;
+    remaining -= 1;
+  }
+
+  return floored.map((value) => value / 10);
+};
+
+const compactWeightLabel = (selectedAssets, weightPct) => {
+  const entries = selectedAssets.map((assetName, index) => ({ assetName, value: weightPct[index] }));
+  const sorted = [...entries].sort((a, b) => b.value - a.value);
+
+  if (entries.length <= 5) {
+    return entries.map((entry) => `${entry.assetName}: ${entry.value}%`).join(' · ');
+  }
+
+  const top = sorted.slice(0, 4).map((entry) => `${entry.assetName}: ${entry.value}%`).join(' · ');
+  return `${top} · +${entries.length - 4} more`;
+};
+
 const evaluatePortfolio = (weights, selectedAssets, assetData, correlationMatrix, riskFreeRate) => {
   const returns = selectedAssets.map((assetName) => assetData[assetName].compoundReturn2024 / 100);
   const vols = selectedAssets.map((assetName) => assetData[assetName].volatility / 100);
@@ -76,7 +105,8 @@ const evaluatePortfolio = (weights, selectedAssets, assetData, correlationMatrix
 
   const risk = Math.sqrt(Math.max(variance, 0));
   const sharpe = risk > 0 ? (portfolioReturn - riskFreeRate / 100) / risk : Number.NEGATIVE_INFINITY;
-  const weightPct = weights.map((value) => Math.round(value * 1000) / 10);
+  const weightPct = roundWeightsToTenths(weights);
+  const fullWeightLabel = selectedAssets.map((assetName, index) => `${assetName}: ${weightPct[index]}%`).join(' · ');
 
   return {
     return: portfolioReturn * 100,
@@ -84,7 +114,8 @@ const evaluatePortfolio = (weights, selectedAssets, assetData, correlationMatrix
     sharpe,
     weights,
     weightPct,
-    weightLabel: selectedAssets.map((assetName, index) => `${assetName}: ${weightPct[index]}%`).join(' · ')
+    weightLabel: compactWeightLabel(selectedAssets, weightPct),
+    fullWeightLabel
   };
 };
 
@@ -172,7 +203,10 @@ export const chooseSampleCount = (assetCount) => {
 };
 
 export const findPortfolioSolutions = ({ portfolios, mode, targetValue, limit = 10 }) => {
-  const target = Number(targetValue);
+  const normalizedTarget = typeof targetValue === 'string' ? targetValue.trim() : `${targetValue ?? ''}`.trim();
+  if (!normalizedTarget) return { feasible: [], fallback: [] };
+
+  const target = Number(normalizedTarget);
   if (!Number.isFinite(target)) return { feasible: [], fallback: [] };
 
   if (mode === 'requiredReturn') {
