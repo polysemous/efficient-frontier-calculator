@@ -36,6 +36,8 @@ const preferredDefaults = [
 ].filter((name) => allAssetNames.includes(name));
 const defaultRiskFreeRate = assetData['U.S. Cash']?.compoundReturn2024 ?? 3.1;
 const slotColors = ['#34d399', '#22d3ee', '#f4c35a', '#c084fc', '#f87171', '#60a5fa', '#f97316', '#a3e635', '#f472b6', '#93c5fd'];
+const getDisplayedReturn = (assetName) => assetData[assetName].compoundReturn2024;
+const getDisplayedVolatility = (assetName) => assetData[assetName].volatility;
 
 const correlationMatrix = buildCorrelationMatrix(assetOrder, correlationRowsText);
 
