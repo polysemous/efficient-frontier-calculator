@@ -23,14 +23,14 @@ npm run dev
 ## Data Source
 The hardcoded asset assumptions in this prototype were derived from:
 
-**J.P. Morgan Asset Management, _2025 Long-Term Capital Market Assumptions_**  
-Section: **"2025 Estimates and correlations | U.S. dollar assumptions"**  
-Source date: **as of September 30, 2024**
+J.P. Morgan Asset Management, 2025 Long-Term Capital Market Assumptions  
+Section: 2025 Estimates and correlations | U.S. dollar assumptions  
+Source date: as of September 30, 2024
 
-This source includes U.S. dollar-denominated assumptions for expected returns, annualized volatility, and correlations across fixed income, equities, and alternatives.
+See docs/SOURCE_DATA.md for full provenance and implementation notes.
 
 ## Important Caveats
-- The current app is a prototype and does **not** yet include the full correlation matrix from the J.P. Morgan report.
+- The current app is a prototype and does not yet include the full correlation matrix from the J.P. Morgan report.
 - Only a subset of asset classes and pairwise correlations are currently hardcoded.
 - For asset pairs not explicitly defined in the app, the code falls back to a placeholder correlation assumption.
 - The chart currently displays a cloud of feasible portfolio combinations for three selected assets; it does not yet isolate the mathematically efficient frontier.
