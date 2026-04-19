@@ -16,6 +16,7 @@ import correlationRowsText from '../data/2025-usd/correlation-rows.txt?raw';
 
 const defaultSelection = ['U.S. Large Cap', 'U.S. Aggregate Bonds', 'Gold'];
 const assetNames = Object.keys(assetData).sort((a, b) => a.localeCompare(b));
+const riskBucketSize = 0.1;
 
 const getDisplayedReturn = (assetName) => assetData[assetName].compoundReturn2024;
 const getDisplayedVolatility = (assetName) => assetData[assetName].volatility;
@@ -63,6 +64,29 @@ const buildCorrelationMatrix = () => {
 
 const correlationMatrix = buildCorrelationMatrix();
 
+const formatWeights = (weights, selected) =>
+  selected.map((assetName, index) => `${assetName}: ${weights[index]}%`).join(' | ');
+
+const CustomTooltip = ({ active, payload }) => {
+  if (!active || !payload || payload.length === 0) {
+    return null;
+  }
+
+  const point = payload[0]?.payload;
+  if (!point) {
+    return null;
+  }
+
+  return (
+    <div className="rounded border bg-white p-3 text-xs shadow">
+      <div className="font-semibold text-slate-800">{point.label ?? 'Portfolio point'}</div>
+      <div>Risk: {point.risk.toFixed(2)}%</div>
+      <div>Return: {point.return.toFixed(2)}%</div>
+      {point.weightLabel ? <div className="mt-1 text-slate-600">{point.weightLabel}</div> : null}
+    </div>
+  );
+};
+
 const EfficientFrontierApp = () => {
   const [selected, setSelected] = useState(defaultSelection);
 
@@ -75,8 +99,8 @@ const EfficientFrontierApp = () => {
     return value;
   };
 
-  const portfolios = useMemo(() => {
-    const points = [];
+  const portfolioAnalysis = useMemo(() => {
+    const cloud = [];
 
     for (let w1 = 0; w1 <= 1; w1 += 0.05) {
       for (let w2 = 0; w2 <= 1 - w1; w2 += 0.05) {
@@ -101,21 +125,69 @@ const EfficientFrontierApp = () => {
           }
         }
 
-        points.push({
+        const point = {
           return: portfolioReturn * 100,
           risk: Math.sqrt(variance) * 100,
-          weights: weights.map((value) => Math.round(value * 100))
-        });
+          weights: weights.map((value) => Math.round(value * 100)),
+          label: 'Portfolio',
+          weightLabel: formatWeights(weights.map((value) => Math.round(value * 100)), selected)
+        };
+
+        cloud.push(point);
       }
     }
 
-    return points;
+    const sortedByRisk = [...cloud].sort((a, b) => {
+      if (a.risk === b.risk) {
+        return b.return - a.return;
+      }
+      return a.risk - b.risk;
+    });
+
+    const bucketLeaders = [];
+    const bucketMap = new Map();
+    for (const point of sortedByRisk) {
+      const bucket = Math.round(point.risk / riskBucketSize);
+      const current = bucketMap.get(bucket);
+      if (!current || point.return > current.return) {
+        bucketMap.set(bucket, point);
+      }
+    }
+
+    const orderedBuckets = [...bucketMap.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([, point]) => point);
+
+    let bestReturnSoFar = -Infinity;
+    for (const point of orderedBuckets) {
+      if (point.return > bestReturnSoFar) {
+        bucketLeaders.push({
+          ...point,
+          label: 'Efficient frontier'
+        });
+        bestReturnSoFar = point.return;
+      }
+    }
+
+    const minVariance = sortedByRisk[0]
+      ? {
+          ...sortedByRisk[0],
+          label: 'Minimum variance portfolio'
+        }
+      : null;
+
+    return {
+      cloud,
+      frontier: bucketLeaders,
+      minVariance: minVariance ? [minVariance] : []
+    };
   }, [selected]);
 
   const selectedAssets = selected.map((assetName) => ({
     name: assetName,
     return: getDisplayedReturn(assetName),
-    risk: getDisplayedVolatility(assetName)
+    risk: getDisplayedVolatility(assetName),
+    label: assetName
   }));
 
   return (
@@ -166,9 +238,16 @@ const EfficientFrontierApp = () => {
               dataKey="return"
               label={{ value: 'Return %', angle: -90, position: 'left' }}
             />
-            <Tooltip />
+            <Tooltip content={<CustomTooltip />} />
             <Legend />
-            <Scatter name="Portfolios" data={portfolios} fill="#3b82f6" />
+            <Scatter name="Portfolio cloud" data={portfolioAnalysis.cloud} fill="#cbd5e1" />
+            <Scatter name="Efficient frontier" data={portfolioAnalysis.frontier} fill="#2563eb" line />
+            <Scatter
+              name="Minimum variance"
+              data={portfolioAnalysis.minVariance}
+              fill="#16a34a"
+              shape="diamond"
+            />
             <Scatter name="Selected assets" data={selectedAssets} fill="#ef4444" shape="triangle" />
           </ScatterChart>
         </ResponsiveContainer>
@@ -192,9 +271,8 @@ const EfficientFrontierApp = () => {
           <div className="rounded border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
             <h3 className="mb-2 font-semibold">Implementation status</h3>
             <p>
-              Asset returns, volatilities, and pairwise correlations now come from the checked-in
-              2025 USD LTCMA dataset. The app no longer uses the placeholder 0.30 correlation
-              fallback.
+              The chart now shows the full portfolio cloud and the efficient frontier envelope derived
+              from it. The minimum-variance portfolio is highlighted separately.
             </p>
           </div>
         </div>
