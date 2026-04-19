@@ -1,11 +1,11 @@
 # Efficient Frontier Calculator
 
-A simple React-based application for visualizing the efficient frontier using Modern Portfolio Theory.
+A simple React-based application for visualizing a three-asset portfolio opportunity set using Modern Portfolio Theory concepts.
 
 ## Features
 - Select 3 asset classes
-- Visualize risk vs return
-- Compute portfolio combinations
+- Visualize risk vs. return
+- Compute portfolio combinations across a 3-asset weight grid
 - Interactive chart using Recharts
 
 ## Tech Stack
@@ -20,13 +20,24 @@ npm install
 npm run dev
 ```
 
-## Notes
-- Data is based on static assumptions (inspired by JP Morgan LTCMA)
-- Correlation matrix is simplified
+## Data Source
+The hardcoded asset assumptions in this prototype were derived from:
+
+**J.P. Morgan Asset Management, _2025 Long-Term Capital Market Assumptions_**  
+Section: **"2025 Estimates and correlations | U.S. dollar assumptions"**  
+Source date: **as of September 30, 2024**
+
+This source includes U.S. dollar-denominated assumptions for expected returns, annualized volatility, and correlations across fixed income, equities, and alternatives.
+
+## Important Caveats
+- The current app is a prototype and does **not** yet include the full correlation matrix from the J.P. Morgan report.
+- Only a subset of asset classes and pairwise correlations are currently hardcoded.
+- For asset pairs not explicitly defined in the app, the code falls back to a placeholder correlation assumption.
+- The chart currently displays a cloud of feasible portfolio combinations for three selected assets; it does not yet isolate the mathematically efficient frontier.
 
 ## Future Improvements
-- Full correlation matrix
-- Data import from real datasets
-- Optimization solver (true frontier)
-- Sharpe ratio / efficient frontier filtering
-
+- Add the full correlation matrix from the source report
+- Move source assumptions into structured data files
+- Implement true frontier extraction / optimization
+- Add Sharpe ratio, minimum-variance, and tangent portfolio views
+- Add report citation details and reproducible data-import workflow
