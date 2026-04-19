@@ -57,6 +57,17 @@ const randomWeights = (count, random) => {
   return raw.map((value) => value / total);
 };
 
+const sampleSubset = (items, subsetSize, random) => {
+  const pool = [...items];
+  const subset = [];
+  for (let i = 0; i < subsetSize && pool.length > 0; i += 1) {
+    const index = Math.floor(random() * pool.length);
+    subset.push(pool[index]);
+    pool.splice(index, 1);
+  }
+  return subset;
+};
+
 const roundWeightsToTenths = (weights) => {
   const rawTenths = weights.map((value) => value * 1000);
   const floored = rawTenths.map((value) => Math.floor(value));
@@ -114,6 +125,7 @@ const evaluatePortfolio = (weights, selectedAssets, assetData, correlationMatrix
     sharpe,
     weights,
     weightPct,
+    selectedAssets,
     weightLabel: compactWeightLabel(selectedAssets, weightPct),
     fullWeightLabel
   };
@@ -169,6 +181,57 @@ export const generatePortfolioSet = ({
   return portfolios;
 };
 
+export const generateSparsePortfolioSet = ({
+  candidateAssets,
+  maxAssetsInPortfolio,
+  assetData,
+  correlationMatrix,
+  riskFreeRate,
+  sampleCount
+}) => {
+  if (candidateAssets.length === 0) return [];
+
+  const maxSize = Math.max(1, Math.min(maxAssetsInPortfolio, candidateAssets.length));
+  const random = createSeededRandom(
+    `${candidateAssets.join('|')}|${riskFreeRate}|${sampleCount}|${maxSize}|sparse`
+  );
+  const portfolios = [];
+  const seen = new Set();
+
+  const addPortfolio = (selectedAssets, weights) => {
+    const key = `${selectedAssets.slice().sort().join('|')}::${weights.map((value) => value.toFixed(4)).join('|')}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    portfolios.push(
+      evaluatePortfolio(weights, selectedAssets, assetData, correlationMatrix, riskFreeRate)
+    );
+  };
+
+  candidateAssets.forEach((assetName) => addPortfolio([assetName], [1]));
+
+  for (let i = 0; i < Math.min(candidateAssets.length, maxSize); i += 1) {
+    addPortfolio(candidateAssets.slice(0, i + 1), Array(i + 1).fill(1 / (i + 1)));
+  }
+
+  if (candidateAssets.length >= 2) {
+    for (let a = 0; a < candidateAssets.length; a += 1) {
+      for (let b = a + 1; b < candidateAssets.length; b += 1) {
+        for (let step = 0; step <= 10; step += 1) {
+          addPortfolio([candidateAssets[a], candidateAssets[b]], [step / 10, 1 - step / 10]);
+        }
+      }
+    }
+  }
+
+  for (let i = 0; i < sampleCount; i += 1) {
+    const subsetSize = maxSize === 1 ? 1 : Math.max(2, Math.min(maxSize, 2 + Math.floor(random() * maxSize)));
+    const subsetAssets = sampleSubset(candidateAssets, subsetSize, random);
+    addPortfolio(subsetAssets, randomWeights(subsetAssets.length, random));
+  }
+
+  return portfolios;
+};
+
 export const extractEfficientFrontier = (portfolios, bucketSize = 0.15) => {
   const sortedByRisk = [...portfolios].sort((a, b) =>
     a.risk === b.risk ? b.return - a.return : a.risk - b.risk
@@ -200,6 +263,12 @@ export const chooseSampleCount = (assetCount) => {
   if (assetCount <= 5) return 4500;
   if (assetCount <= 7) return 6500;
   return 8500;
+};
+
+export const chooseAdvisorSampleCount = (assetCount, maxAssetsInPortfolio) => {
+  if (assetCount <= 12 && maxAssetsInPortfolio <= 4) return 2800;
+  if (assetCount <= 18 && maxAssetsInPortfolio <= 6) return 3600;
+  return 4200;
 };
 
 export const findPortfolioSolutions = ({ portfolios, mode, targetValue, limit = 10 }) => {
