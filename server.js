@@ -46,7 +46,7 @@ app.get('/api/ticker/:symbol', async (req, res) => {
   }
 
   try {
-    const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&symbol=${symbol}&outputsize=full&apikey=${API_KEY}`;
+    const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&outputsize=full&apikey=${API_KEY}`;
     const response = await fetch(url);
     const data = await response.json();
 
