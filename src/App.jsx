@@ -17,6 +17,7 @@ import correlationRowsText from '../data/2025-usd/correlation-rows.txt?raw';
 const defaultSelection = ['U.S. Large Cap', 'U.S. Aggregate Bonds', 'Gold'];
 const assetNames = Object.keys(assetData).sort((a, b) => a.localeCompare(b));
 const riskBucketSize = 0.1;
+const defaultRiskFreeRate = assetData['U.S. Cash']?.compoundReturn2024 ?? 3.1;
 
 const getDisplayedReturn = (assetName) => assetData[assetName].compoundReturn2024;
 const getDisplayedVolatility = (assetName) => assetData[assetName].volatility;
@@ -82,6 +83,7 @@ const CustomTooltip = ({ active, payload }) => {
       <div className="font-semibold text-slate-800">{point.label ?? 'Portfolio point'}</div>
       <div>Risk: {point.risk.toFixed(2)}%</div>
       <div>Return: {point.return.toFixed(2)}%</div>
+      {typeof point.sharpe === 'number' ? <div>Sharpe: {point.sharpe.toFixed(3)}</div> : null}
       {point.weightLabel ? <div className="mt-1 text-slate-600">{point.weightLabel}</div> : null}
     </div>
   );
@@ -89,6 +91,10 @@ const CustomTooltip = ({ active, payload }) => {
 
 const EfficientFrontierApp = () => {
   const [selected, setSelected] = useState(defaultSelection);
+  const [riskFreeRate, setRiskFreeRate] = useState(defaultRiskFreeRate.toFixed(2));
+
+  const parsedRiskFreeRate = Number(riskFreeRate);
+  const riskFreeRateValue = Number.isFinite(parsedRiskFreeRate) ? parsedRiskFreeRate : defaultRiskFreeRate;
 
   const getCorr = (a, b) => {
     if (a === b) return 1;
@@ -101,6 +107,7 @@ const EfficientFrontierApp = () => {
 
   const portfolioAnalysis = useMemo(() => {
     const cloud = [];
+    const riskFreeDecimal = riskFreeRateValue / 100;
 
     for (let w1 = 0; w1 <= 1; w1 += 0.05) {
       for (let w2 = 0; w2 <= 1 - w1; w2 += 0.05) {
@@ -125,9 +132,13 @@ const EfficientFrontierApp = () => {
           }
         }
 
+        const risk = Math.sqrt(variance);
+        const sharpe = risk > 0 ? (portfolioReturn - riskFreeDecimal) / risk : Number.NEGATIVE_INFINITY;
+
         const point = {
           return: portfolioReturn * 100,
-          risk: Math.sqrt(variance) * 100,
+          risk: risk * 100,
+          sharpe,
           weights: weights.map((value) => Math.round(value * 100)),
           label: 'Portfolio',
           weightLabel: formatWeights(weights.map((value) => Math.round(value * 100)), selected)
@@ -170,18 +181,27 @@ const EfficientFrontierApp = () => {
     }
 
     const minVariance = sortedByRisk[0]
-      ? {
+      ? [{
           ...sortedByRisk[0],
           label: 'Minimum variance portfolio'
-        }
-      : null;
+        }]
+      : [];
+
+    const maxSharpePoint = [...cloud].sort((a, b) => b.sharpe - a.sharpe)[0];
+    const maxSharpe = maxSharpePoint
+      ? [{
+          ...maxSharpePoint,
+          label: 'Maximum Sharpe portfolio'
+        }]
+      : [];
 
     return {
       cloud,
       frontier: bucketLeaders,
-      minVariance: minVariance ? [minVariance] : []
+      minVariance,
+      maxSharpe
     };
-  }, [selected]);
+  }, [riskFreeRateValue, selected]);
 
   const selectedAssets = selected.map((assetName) => ({
     name: assetName,
@@ -202,7 +222,7 @@ const EfficientFrontierApp = () => {
           Full U.S. dollar correlation matrix loaded from versioned LTCMA source data.
         </p>
 
-        <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-4">
           {[0, 1, 2].map((index) => (
             <div key={index}>
               <label className="mb-1 block text-sm font-medium">Asset {index + 1}</label>
@@ -227,6 +247,20 @@ const EfficientFrontierApp = () => {
               </div>
             </div>
           ))}
+
+          <div>
+            <label className="mb-1 block text-sm font-medium">Risk-free rate (%)</label>
+            <input
+              type="number"
+              step="0.01"
+              value={riskFreeRate}
+              onChange={(event) => setRiskFreeRate(event.target.value)}
+              className="w-full rounded border p-2"
+            />
+            <div className="mt-1 text-xs text-gray-600">
+              Default based on U.S. Cash: {defaultRiskFreeRate.toFixed(2)}%
+            </div>
+          </div>
         </div>
 
         <ResponsiveContainer width="100%" height={420}>
@@ -248,11 +282,17 @@ const EfficientFrontierApp = () => {
               fill="#16a34a"
               shape="diamond"
             />
+            <Scatter
+              name="Maximum Sharpe"
+              data={portfolioAnalysis.maxSharpe}
+              fill="#7c3aed"
+              shape="star"
+            />
             <Scatter name="Selected assets" data={selectedAssets} fill="#ef4444" shape="triangle" />
           </ScatterChart>
         </ResponsiveContainer>
 
-        <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
           <div className="rounded border p-4">
             <h3 className="mb-2 font-semibold">Current correlation inputs</h3>
             <div className="space-y-1 text-sm">
@@ -271,8 +311,17 @@ const EfficientFrontierApp = () => {
           <div className="rounded border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
             <h3 className="mb-2 font-semibold">Implementation status</h3>
             <p>
-              The chart now shows the full portfolio cloud and the efficient frontier envelope derived
-              from it. The minimum-variance portfolio is highlighted separately.
+              The chart now shows the full portfolio cloud, the efficient frontier envelope, the
+              minimum-variance portfolio, and the maximum Sharpe portfolio for the chosen risk-free
+              rate.
+            </p>
+          </div>
+
+          <div className="rounded border border-violet-200 bg-violet-50 p-4 text-sm text-violet-900">
+            <h3 className="mb-2 font-semibold">Sharpe ratio</h3>
+            <p>
+              Sharpe = (portfolio return − risk-free rate) / portfolio risk. Adjust the risk-free rate
+              to see how the optimal risk-adjusted portfolio changes.
             </p>
           </div>
         </div>
