@@ -65,8 +65,6 @@ const correlationMatrix = buildCorrelationMatrix();
 const fmtPct = (n, d = 2) => `${n.toFixed(d)}%`;
 const fmtNum = (n, d = 3) => n.toFixed(d);
 
-// ---------------- Custom chart pieces ----------------
-
 const CustomTooltip = ({ active, payload }) => {
   if (!active || !payload || payload.length === 0) return null;
   const point = payload[0]?.payload;
@@ -87,7 +85,6 @@ const CustomTooltip = ({ active, payload }) => {
   );
 };
 
-// A glowing star shape for Max Sharpe.
 const SharpeShape = (props) => {
   const { cx, cy } = props;
   if (cx == null || cy == null) return null;
@@ -153,7 +150,16 @@ const CloudDot = (props) => {
   return <circle cx={cx} cy={cy} r={2.2} fill="#3b4a7a" opacity={0.55} />;
 };
 
-// ---------------- Donut (pure SVG) ----------------
+const RiskFreeShape = (props) => {
+  const { cx, cy } = props;
+  if (cx == null || cy == null) return null;
+  return (
+    <g>
+      <circle cx={cx} cy={cy} r={8} fill="#0b1020" stroke="#f5f7ff" strokeWidth={1.6} />
+      <circle cx={cx} cy={cy} r={3} fill="#f5f7ff" />
+    </g>
+  );
+};
 
 const Donut = ({ segments, centerTop, centerBottom }) => {
   const size = 120;
@@ -196,8 +202,6 @@ const Donut = ({ segments, centerTop, centerBottom }) => {
     </svg>
   );
 };
-
-// ---------------- App ----------------
 
 const EfficientFrontierApp = () => {
   const [selected, setSelected] = useState(defaultSelection);
@@ -242,9 +246,7 @@ const EfficientFrontierApp = () => {
           sharpe,
           weights: weightPct,
           label: 'Portfolio',
-          weightLabel: selected
-            .map((name, i) => `${name}: ${weightPct[i]}%`)
-            .join(' · ')
+          weightLabel: selected.map((name, i) => `${name}: ${weightPct[i]}%`).join(' · ')
         });
       }
     }
@@ -270,13 +272,9 @@ const EfficientFrontierApp = () => {
       }
     }
 
-    const minVariance = sortedByRisk[0]
-      ? [{ ...sortedByRisk[0], label: 'Minimum variance portfolio' }]
-      : [];
+    const minVariance = sortedByRisk[0] ? [{ ...sortedByRisk[0], label: 'Minimum variance portfolio' }] : [];
     const maxSharpePoint = [...cloud].sort((a, b) => b.sharpe - a.sharpe)[0];
-    const maxSharpe = maxSharpePoint
-      ? [{ ...maxSharpePoint, label: 'Maximum Sharpe portfolio' }]
-      : [];
+    const maxSharpe = maxSharpePoint ? [{ ...maxSharpePoint, label: 'Maximum Sharpe portfolio' }] : [];
 
     return { cloud, frontier, minVariance, maxSharpe };
   }, [riskFreeRateValue, selected]);
@@ -295,17 +293,39 @@ const EfficientFrontierApp = () => {
   const frontierLow = frontierReturns.length ? Math.min(...frontierReturns) : 0;
   const frontierHigh = frontierReturns.length ? Math.max(...frontierReturns) : 0;
 
-  // Axis domain padding
-  const allPts = [
+  const basePoints = [
     ...portfolioAnalysis.cloud,
-    ...selectedAssets.map((s) => ({ risk: s.risk, return: s.return }))
+    ...selectedAssets.map((s) => ({ risk: s.risk, return: s.return })),
+    { risk: 0, return: riskFreeRateValue }
   ];
-  const xs = allPts.map((p) => p.risk);
-  const ys = allPts.map((p) => p.return);
-  const xMin = Math.max(0, Math.floor(Math.min(...xs) - 1));
-  const xMax = Math.ceil(Math.max(...xs) + 1);
-  const yMin = Math.floor(Math.min(...ys) - 0.5);
-  const yMax = Math.ceil(Math.max(...ys) + 0.5);
+  const baseXs = basePoints.map((p) => p.risk);
+  const baseYs = basePoints.map((p) => p.return);
+  const xMin = 0;
+  const xMax = Math.ceil(Math.max(...baseXs) + 1);
+
+  const capitalMarketLine = ms && ms.risk > 0
+    ? [
+        {
+          risk: 0,
+          return: riskFreeRateValue,
+          label: 'Risk-free rate',
+          sharpe: null
+        },
+        {
+          risk: xMax,
+          return: riskFreeRateValue + ((ms.return - riskFreeRateValue) / ms.risk) * xMax,
+          label: 'Capital Market Line',
+          sharpe: ms.sharpe
+        }
+      ]
+    : [];
+
+  const allYs = [
+    ...baseYs,
+    ...capitalMarketLine.map((p) => p.return)
+  ];
+  const yMin = Math.floor(Math.min(...allYs) - 0.5);
+  const yMax = Math.ceil(Math.max(...allYs) + 0.5);
 
   const pairs = [
     [0, 1],
@@ -323,7 +343,6 @@ const EfficientFrontierApp = () => {
   return (
     <div className="app-shell">
       <div className="container">
-        {/* Header */}
         <div className="brand-row">
           <div className="brand">
             <div className="brand-mark" />
@@ -335,13 +354,11 @@ const EfficientFrontierApp = () => {
           <div className="header-meta">
             <span className="header-dot" />
             <span>
-              {datasetMetadata.datasetName} · {datasetMetadata.currency} · Vintage{' '}
-              {datasetMetadata.assumptionVintage}
+              {datasetMetadata.datasetName} · {datasetMetadata.currency} · Vintage {datasetMetadata.assumptionVintage}
             </span>
           </div>
         </div>
 
-        {/* Hero + KPIs */}
         <div className="hero">
           <div>
             <h1 className="hero-title">
@@ -350,7 +367,7 @@ const EfficientFrontierApp = () => {
             <p className="hero-sub">
               A visual lab for three-asset portfolio construction. Pick your asset classes,
               calibrate the risk-free rate, and see the mathematically optimal risk/return
-              trade-offs unfold in real time — grounded in J.P. Morgan's long-term capital
+              trade-offs unfold in real time — grounded in J.P. Morgan&apos;s long-term capital
               market assumptions.
             </p>
           </div>
@@ -359,9 +376,7 @@ const EfficientFrontierApp = () => {
             <div className="kpi" style={{ '--kpi-accent': 'var(--accent-3)' }}>
               <div className="kpi-label">Max Sharpe</div>
               <div className="kpi-value">{ms ? fmtNum(ms.sharpe) : '—'}</div>
-              <div className="kpi-delta">
-                {ms ? `${fmtPct(ms.return)} @ ${fmtPct(ms.risk)} risk` : ''}
-              </div>
+              <div className="kpi-delta">{ms ? `${fmtPct(ms.return)} @ ${fmtPct(ms.risk)} risk` : ''}</div>
             </div>
             <div className="kpi" style={{ '--kpi-accent': 'var(--accent-4)' }}>
               <div className="kpi-label">Min Variance</div>
@@ -378,7 +393,6 @@ const EfficientFrontierApp = () => {
           </div>
         </div>
 
-        {/* Controls */}
         <div className="panel">
           <div className="panel-header">
             <h2 className="panel-title">Asset selection</h2>
@@ -440,13 +454,13 @@ const EfficientFrontierApp = () => {
           </div>
         </div>
 
-        {/* Chart */}
         <div className="chart-panel">
           <div className="chart-header">
             <h2 className="panel-title">Risk / return surface</h2>
             <div className="chart-legend">
               <span className="legend-item"><span className="legend-dot cloud" /> Feasible cloud</span>
               <span className="legend-item"><span className="legend-dot frontier" /> Efficient frontier</span>
+              <span className="legend-item"><span className="legend-dot cml" /> Capital Market Line</span>
               <span className="legend-item"><span className="legend-dot sharpe" /> Max Sharpe</span>
               <span className="legend-item"><span className="legend-dot minvar" /> Min variance</span>
               <span className="legend-item"><span className="legend-dot asset" /> Selected assets</span>
@@ -459,6 +473,10 @@ const EfficientFrontierApp = () => {
                 <linearGradient id="frontierLine" x1="0" y1="0" x2="1" y2="0">
                   <stop offset="0%" stopColor="#22d3ee" />
                   <stop offset="55%" stopColor="#34d399" />
+                  <stop offset="100%" stopColor="#f4c35a" />
+                </linearGradient>
+                <linearGradient id="cmlLine" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stopColor="#f5f7ff" />
                   <stop offset="100%" stopColor="#f4c35a" />
                 </linearGradient>
               </defs>
@@ -484,11 +502,7 @@ const EfficientFrontierApp = () => {
                 <Label value="RETURN" angle={-90} position="insideLeft" offset={10} className="recharts-label" />
               </YAxis>
               <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(148,163,205,0.25)', strokeDasharray: '2 3' }} />
-              <Scatter
-                name="Portfolio cloud"
-                data={portfolioAnalysis.cloud}
-                shape={<CloudDot />}
-              />
+              <Scatter name="Portfolio cloud" data={portfolioAnalysis.cloud} shape={<CloudDot />} />
               <Scatter
                 name="Efficient frontier"
                 data={portfolioAnalysis.frontier}
@@ -497,25 +511,19 @@ const EfficientFrontierApp = () => {
                 lineType="joint"
               />
               <Scatter
-                name="Minimum variance"
-                data={portfolioAnalysis.minVariance}
-                shape={<MinVarShape />}
+                name="Capital Market Line"
+                data={capitalMarketLine}
+                line={{ stroke: 'url(#cmlLine)', strokeWidth: 2, strokeDasharray: '6 4' }}
+                lineType="joint"
               />
-              <Scatter
-                name="Maximum Sharpe"
-                data={portfolioAnalysis.maxSharpe}
-                shape={<SharpeShape />}
-              />
-              <Scatter
-                name="Selected assets"
-                data={selectedAssets}
-                shape={<SelectedAssetShape />}
-              />
+              <Scatter name="Risk-free rate" data={capitalMarketLine.slice(0, 1)} shape={<RiskFreeShape />} />
+              <Scatter name="Minimum variance" data={portfolioAnalysis.minVariance} shape={<MinVarShape />} />
+              <Scatter name="Maximum Sharpe" data={portfolioAnalysis.maxSharpe} shape={<SharpeShape />} />
+              <Scatter name="Selected assets" data={selectedAssets} shape={<SelectedAssetShape />} />
             </ScatterChart>
           </ResponsiveContainer>
         </div>
 
-        {/* Insights */}
         <div className="insight-grid">
           <div className="insight-card">
             <h3 className="insight-title">Pairwise correlations</h3>
@@ -550,11 +558,7 @@ const EfficientFrontierApp = () => {
             {ms ? (
               <>
                 <div className="donut-wrap">
-                  <Donut
-                    segments={donutSegments(ms)}
-                    centerTop={fmtNum(ms.sharpe)}
-                    centerBottom="SHARPE"
-                  />
+                  <Donut segments={donutSegments(ms)} centerTop={fmtNum(ms.sharpe)} centerBottom="SHARPE" />
                   <div className="donut-legend">
                     {selected.map((name, i) => (
                       <div className="donut-legend-row" key={name}>
@@ -584,39 +588,41 @@ const EfficientFrontierApp = () => {
           </div>
 
           <div className="insight-card">
-            <h3 className="insight-title">Min variance allocation</h3>
-            {mv ? (
+            <h3 className="insight-title">Capital Market Line</h3>
+            {ms ? (
               <>
                 <div className="donut-wrap">
                   <Donut
-                    segments={donutSegments(mv)}
-                    centerTop={fmtPct(mv.risk, 1)}
-                    centerBottom="VOL"
+                    segments={donutSegments(ms)}
+                    centerTop={fmtPct(riskFreeRateValue, 1)}
+                    centerBottom="RF"
                   />
                   <div className="donut-legend">
-                    {selected.map((name, i) => (
-                      <div className="donut-legend-row" key={name}>
-                        <span className="legend-swatch" style={{ background: slotColors[i] }} />
-                        <span className="name">{name}</span>
-                        <span className="pct">{mv.weights[i]}%</span>
-                      </div>
-                    ))}
+                    <div className="donut-legend-row">
+                      <span className="legend-swatch" style={{ background: '#f5f7ff' }} />
+                      <span className="name">Intercept</span>
+                      <span className="pct">{fmtPct(riskFreeRateValue)}</span>
+                    </div>
+                    <div className="donut-legend-row">
+                      <span className="legend-swatch" style={{ background: '#f4c35a' }} />
+                      <span className="name">Tangency point</span>
+                      <span className="pct">{fmtPct(ms.return)} @ {fmtPct(ms.risk)}</span>
+                    </div>
+                    <div className="donut-legend-row">
+                      <span className="legend-swatch" style={{ background: '#22d3ee' }} />
+                      <span className="name">Slope</span>
+                      <span className="pct">{fmtNum(ms.sharpe)}</span>
+                    </div>
                   </div>
                 </div>
                 <div className="insight-metrics">
                   <div className="stat">
-                    <span className="stat-label">Return</span>
-                    <span className="stat-value">{fmtPct(mv.return)}</span>
+                    <span className="stat-label">Interpretation</span>
+                    <span className="stat-value">Best risk-adjusted line</span>
                   </div>
                   <div className="stat">
-                    <span className="stat-label">Risk</span>
-                    <span className="stat-value">{fmtPct(mv.risk)}</span>
-                  </div>
-                  <div className="stat">
-                    <span className="stat-label">Sharpe</span>
-                    <span className="stat-value">
-                      {Number.isFinite(mv.sharpe) ? fmtNum(mv.sharpe) : '—'}
-                    </span>
+                    <span className="stat-label">Tangency</span>
+                    <span className="stat-value">Max Sharpe</span>
                   </div>
                 </div>
               </>
@@ -625,8 +631,7 @@ const EfficientFrontierApp = () => {
         </div>
 
         <div className="footer">
-          Source · J.P. Morgan Asset Management · 2025 Long-Term Capital Market Assumptions ·
-          U.S. dollar assumptions · as of September 30, 2024
+          Source · J.P. Morgan Asset Management · 2025 Long-Term Capital Market Assumptions · U.S. dollar assumptions · as of September 30, 2024
         </div>
       </div>
     </div>
