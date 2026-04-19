@@ -57,15 +57,32 @@ const randomWeights = (count, random) => {
   return raw.map((value) => value / total);
 };
 
-const sampleSubset = (items, subsetSize, random) => {
-  const pool = [...items];
+const sampleSubset = (items, subsetSize, random, requiredPool = []) => {
+  const uniqueRequired = [...new Set(requiredPool)].filter((item) => items.includes(item));
   const subset = [];
-  for (let i = 0; i < subsetSize && pool.length > 0; i += 1) {
+  const pool = [...items];
+
+  if (uniqueRequired.length > 0) {
+    const forced = uniqueRequired[Math.floor(random() * uniqueRequired.length)];
+    subset.push(forced);
+    pool.splice(pool.indexOf(forced), 1);
+  }
+
+  while (subset.length < subsetSize && pool.length > 0) {
     const index = Math.floor(random() * pool.length);
     subset.push(pool[index]);
     pool.splice(index, 1);
   }
+
   return subset;
+};
+
+const canonicalPortfolioKey = (selectedAssets, weights) => {
+  return selectedAssets
+    .map((assetName, index) => ({ assetName, weight: weights[index] }))
+    .sort((a, b) => a.assetName.localeCompare(b.assetName))
+    .map(({ assetName, weight }) => `${assetName}:${weight.toFixed(4)}`)
+    .join('|');
 };
 
 const roundWeightsToTenths = (weights) => {
@@ -187,19 +204,20 @@ export const generateSparsePortfolioSet = ({
   assetData,
   correlationMatrix,
   riskFreeRate,
-  sampleCount
+  sampleCount,
+  requiredAssetsPool = []
 }) => {
   if (candidateAssets.length === 0) return [];
 
   const maxSize = Math.max(1, Math.min(maxAssetsInPortfolio, candidateAssets.length));
   const random = createSeededRandom(
-    `${candidateAssets.join('|')}|${riskFreeRate}|${sampleCount}|${maxSize}|sparse`
+    `${candidateAssets.join('|')}|${riskFreeRate}|${sampleCount}|${maxSize}|${requiredAssetsPool.join('|')}|sparse`
   );
   const portfolios = [];
   const seen = new Set();
 
   const addPortfolio = (selectedAssets, weights) => {
-    const key = `${selectedAssets.slice().sort().join('|')}::${weights.map((value) => value.toFixed(4)).join('|')}`;
+    const key = canonicalPortfolioKey(selectedAssets, weights);
     if (seen.has(key)) return;
     seen.add(key);
     portfolios.push(
@@ -225,7 +243,7 @@ export const generateSparsePortfolioSet = ({
 
   for (let i = 0; i < sampleCount; i += 1) {
     const subsetSize = maxSize === 1 ? 1 : Math.max(2, Math.min(maxSize, 2 + Math.floor(random() * maxSize)));
-    const subsetAssets = sampleSubset(candidateAssets, subsetSize, random);
+    const subsetAssets = sampleSubset(candidateAssets, subsetSize, random, requiredAssetsPool);
     addPortfolio(subsetAssets, randomWeights(subsetAssets.length, random));
   }
 
