@@ -42,6 +42,11 @@ const preferredDefaults = [
 const defaultRiskFreeRate = assetData['U.S. Cash']?.compoundReturn2024 ?? 3.1;
 const slotColors = ['#34d399', '#22d3ee', '#f4c35a', '#c084fc', '#f87171', '#60a5fa', '#f97316', '#a3e635', '#f472b6', '#93c5fd'];
 const correlationMatrix = buildCorrelationMatrix(assetOrder, correlationRowsText);
+const diversificationThresholds = {
+  relaxed: 0.75,
+  balanced: 0.6,
+  strict: 0.45
+};
 
 const fmtPct = (n, d = 2) => `${n.toFixed(d)}%`;
 const fmtNum = (n, d = 3) => n.toFixed(d);
@@ -277,6 +282,8 @@ const CustomTooltip = ({ active, payload }) => {
       <div className="tooltip-row"><span>Return</span><span>{fmtPct(point.return)}</span></div>
       <div className="tooltip-row"><span>Risk</span><span>{fmtPct(point.risk)}</span></div>
       {typeof point.sharpe === 'number' && Number.isFinite(point.sharpe) ? <div className="tooltip-row"><span>Sharpe</span><span>{fmtNum(point.sharpe)}</span></div> : null}
+      {typeof point.avgCorrelation === 'number' && Number.isFinite(point.avgCorrelation) ? <div className="tooltip-row"><span>Avg corr</span><span>{fmtNum(point.avgCorrelation, 2)}</span></div> : null}
+      {typeof point.diversificationRatio === 'number' && Number.isFinite(point.diversificationRatio) ? <div className="tooltip-row"><span>Div ratio</span><span>{fmtNum(point.diversificationRatio, 2)}</span></div> : null}
       {point.fullWeightLabel ? <div className="tooltip-weights">{point.fullWeightLabel}</div> : null}
     </div>
   );
@@ -332,6 +339,9 @@ const EfficientFrontierApp = () => {
   const [advisorMode, setAdvisorMode] = useState('requiredReturn');
   const [advisorTarget, setAdvisorTarget] = useState('8.00');
   const [advisorMaxAssets, setAdvisorMaxAssets] = useState(5);
+  const [minAssets, setMinAssets] = useState(4);
+  const [maxWeight, setMaxWeight] = useState(0.3);
+  const [diversificationLevel, setDiversificationLevel] = useState('balanced');
   const [includeOnlyPublicMarkets, setIncludeOnlyPublicMarkets] = useState(false);
   const [excludeAlternatives, setExcludeAlternatives] = useState(false);
   const [requireBond, setRequireBond] = useState(false);
@@ -346,6 +356,9 @@ const EfficientFrontierApp = () => {
   const parsedRiskFreeRate = Number(riskFreeRate);
   const riskFreeRateValue = Number.isFinite(parsedRiskFreeRate) ? parsedRiskFreeRate : defaultRiskFreeRate;
   const parsedTickerInput = useMemo(() => parseTickerInput(tickerInput), [tickerInput]);
+  const advisorMinAssets = Math.max(2, Math.min(minAssets, advisorMaxAssets));
+  const advisorMaxWeight = Math.max(0.1, Math.min(maxWeight, 1));
+  const advisorMaxAverageCorrelation = diversificationThresholds[diversificationLevel] ?? diversificationThresholds.balanced;
 
   useEffect(() => {
     if (activeTab !== 'ticker' || loadedTickerSymbols.length === 0) return;
@@ -434,8 +447,19 @@ const EfficientFrontierApp = () => {
   const rawAdvisorPortfolios = useMemo(() => {
     if (activeTab !== 'advisor') return [];
     const sampleCount = chooseAdvisorSampleCount(advisorUniverse.length, advisorMaxAssets);
-    return generateSparsePortfolioSet({ candidateAssets: advisorUniverse, maxAssetsInPortfolio: advisorMaxAssets, assetData, correlationMatrix, riskFreeRate: riskFreeRateValue, sampleCount, requiredAssetsPool: requireBond ? advisorBondUniverse : [] });
-  }, [activeTab, advisorBondUniverse, advisorMaxAssets, advisorUniverse, requireBond, riskFreeRateValue]);
+    return generateSparsePortfolioSet({
+      candidateAssets: advisorUniverse,
+      maxAssetsInPortfolio: advisorMaxAssets,
+      minAssetsInPortfolio: advisorMinAssets,
+      maxWeightPerAsset: advisorMaxWeight,
+      maxAverageCorrelation: advisorMaxAverageCorrelation,
+      assetData,
+      correlationMatrix,
+      riskFreeRate: riskFreeRateValue,
+      sampleCount,
+      requiredAssetsPool: requireBond ? advisorBondUniverse : []
+    });
+  }, [activeTab, advisorBondUniverse, advisorMaxAssets, advisorUniverse, advisorMinAssets, advisorMaxWeight, advisorMaxAverageCorrelation, requireBond, riskFreeRateValue]);
 
   const advisorOptimizedSet = useMemo(() => {
     if (activeTab !== 'advisor') return emptyPortfolioSet('Choose for Me', { candidateUniverse: advisorUniverse });
@@ -489,8 +513,19 @@ const EfficientFrontierApp = () => {
   const displayCloud = useMemo(() => currentSet.portfolios.filter((_, index) => index % (currentSet.portfolios.length > 7000 ? 3 : currentSet.portfolios.length > 4500 ? 2 : 1) === 0), [currentSet.portfolios]);
   const donutSegments = (point) => point.selectedAssets.map((name, index) => ({ name, value: point.weightPct[index], color: slotColors[index % slotColors.length] }));
 
-  const advisorFilterSummary = [includeOnlyPublicMarkets ? 'public markets only' : null, excludeAlternatives ? 'alternatives excluded' : null, requireBond ? 'at least one bond asset' : null].filter(Boolean);
-  const advisorEmptyMessage = advisorUniverse.length === 0 ? 'Your current filters remove the entire advisor universe. Try loosening one or more filters.' : advisorOptimizedSet.portfolios.length === 0 ? 'Your current advisor constraints produced no candidate portfolios. Try lowering the target or relaxing the filters.' : 'No portfolios available for the current settings.';
+  const advisorFilterSummary = [
+    includeOnlyPublicMarkets ? 'public markets only' : null,
+    excludeAlternatives ? 'alternatives excluded' : null,
+    requireBond ? 'at least one bond asset' : null,
+    `min ${advisorMinAssets} assets`,
+    `max ${Math.round(advisorMaxWeight * 100)}% per asset`,
+    `${diversificationLevel} corr limit ${fmtNum(advisorMaxAverageCorrelation, 2)}`
+  ].filter(Boolean);
+  const advisorEmptyMessage = advisorUniverse.length === 0
+    ? 'Your current filters remove the entire advisor universe. Try loosening one or more filters.'
+    : advisorOptimizedSet.portfolios.length === 0
+      ? 'Your current advisor constraints produced no candidate portfolios. Try loosening the diversification rules, lowering the minimum asset count, or raising the weight cap.'
+      : 'No portfolios available for the current settings.';
   const tickerStatusMessage = tickerFetchState.status === 'loading' ? 'Loading ticker data from your local backend…' : tickerFetchState.status === 'error' ? tickerFetchState.error : tickerDataset.error || '';
 
   return (
@@ -547,8 +582,24 @@ const EfficientFrontierApp = () => {
           </>
         ) : activeTab === 'advisor' ? (
           <div className="finder-grid">
-            <div className="panel finder-panel"><div className="panel-header"><h2 className="panel-title">Advisor constraints</h2><div className={`status-pill ${advisorFinderResults.feasible.length ? 'success' : 'warning'}`}>{advisorFinderResults.feasible.length ? 'recommendations found' : 'showing nearest matches'}</div></div><div className="mode-toggle"><button className={`mode-button ${advisorMode === 'requiredReturn' ? 'active' : ''}`} onClick={() => setAdvisorMode('requiredReturn')}>Required return</button><button className={`mode-button ${advisorMode === 'maxRisk' ? 'active' : ''}`} onClick={() => setAdvisorMode('maxRisk')}>Maximum risk</button></div><div className="finder-input-row advisor-grid"><div className="rf-card compact"><div className="asset-label">{advisorMode === 'requiredReturn' ? 'Target return' : 'Risk ceiling'}</div><div className="rf-input-row"><input className="rf-input" type="number" step="0.10" value={advisorTarget} onChange={(event) => setAdvisorTarget(event.target.value)} /><span className="rf-suffix">%</span></div><div className="rf-hint">Let the app choose assets and weights.</div></div><div className="count-stepper compact-stepper"><span className="asset-label">Max assets in portfolio</span><div className="stepper-controls"><button className="stepper-button" aria-label="Decrease advisor max assets" onClick={() => setAdvisorMaxAssets((value) => Math.max(2, value - 1))} disabled={advisorMaxAssets <= 2}>−</button><span className="stepper-value">{advisorMaxAssets}</span><button className="stepper-button" aria-label="Increase advisor max assets" onClick={() => setAdvisorMaxAssets((value) => Math.min(10, value + 1))} disabled={advisorMaxAssets >= 10}>+</button></div></div></div><div className="filter-grid"><label className="filter-card"><input type="checkbox" checked={includeOnlyPublicMarkets} onChange={(event) => setIncludeOnlyPublicMarkets(event.target.checked)} /> <span>Include only public markets</span></label><label className="filter-card"><input type="checkbox" checked={excludeAlternatives} onChange={(event) => setExcludeAlternatives(event.target.checked)} /> <span>Exclude alternatives</span></label><label className="filter-card"><input type="checkbox" checked={requireBond} onChange={(event) => setRequireBond(event.target.checked)} /> <span>Require at least one bond asset</span></label></div><div className="finder-summary"><div className="summary-chip">Universe {advisorUniverse.length} assets</div><div className="summary-chip">Bond assets {advisorBondUniverse.length}</div><div className="summary-chip">{advisorFilterSummary.length ? advisorFilterSummary.join(' · ') : 'no extra filters'}</div></div></div>
-            <div className="panel recommendation-panel"><div className="panel-header"><h2 className="panel-title">Advisor recommendation</h2><div className="header-meta" style={{ fontSize: 10 }}>{advisorFinderResults.feasible.length ? 'best fit from broad universe' : 'closest available fit'}</div></div>{recommendation ? <><div className="donut-wrap"><Donut segments={donutSegments(recommendation)} centerTop={advisorMode === 'requiredReturn' ? fmtPct(recommendation.risk, 1) : fmtPct(recommendation.return, 1)} centerBottom={advisorMode === 'requiredReturn' ? 'RISK' : 'RETURN'} /><div className="donut-legend">{recommendation.selectedAssets.map((name, index) => <div className="donut-legend-row" key={name}><span className="legend-swatch" style={{ background: slotColors[index % slotColors.length] }} /><span className="name">{name}</span><span className="pct">{recommendation.weightPct[index]}%</span></div>)}</div></div><div className="insight-metrics"><div className="stat"><span className="stat-label">Return</span><span className="stat-value">{fmtPct(recommendation.return)}</span></div><div className="stat"><span className="stat-label">Risk</span><span className="stat-value">{fmtPct(recommendation.risk)}</span></div><div className="stat"><span className="stat-label">Sharpe</span><span className="stat-value">{Number.isFinite(recommendation.sharpe) ? fmtNum(recommendation.sharpe) : '—'}</span></div></div></> : <div className="empty-state">{advisorEmptyMessage}</div>}</div>
+            <div className="panel finder-panel">
+              <div className="panel-header"><h2 className="panel-title">Advisor constraints</h2><div className={`status-pill ${advisorFinderResults.feasible.length ? 'success' : 'warning'}`}>{advisorFinderResults.feasible.length ? 'recommendations found' : 'showing nearest matches'}</div></div>
+              <div className="mode-toggle"><button className={`mode-button ${advisorMode === 'requiredReturn' ? 'active' : ''}`} onClick={() => setAdvisorMode('requiredReturn')}>Required return</button><button className={`mode-button ${advisorMode === 'maxRisk' ? 'active' : ''}`} onClick={() => setAdvisorMode('maxRisk')}>Maximum risk</button></div>
+              <div className="finder-input-row advisor-grid">
+                <div className="rf-card compact"><div className="asset-label">{advisorMode === 'requiredReturn' ? 'Target return' : 'Risk ceiling'}</div><div className="rf-input-row"><input className="rf-input" type="number" step="0.10" value={advisorTarget} onChange={(event) => setAdvisorTarget(event.target.value)} /><span className="rf-suffix">%</span></div><div className="rf-hint">Let the app choose assets and weights.</div></div>
+                <div className="count-stepper compact-stepper"><span className="asset-label">Max assets in portfolio</span><div className="stepper-controls"><button className="stepper-button" aria-label="Decrease advisor max assets" onClick={() => setAdvisorMaxAssets((value) => Math.max(2, value - 1))} disabled={advisorMaxAssets <= 2}>−</button><span className="stepper-value">{advisorMaxAssets}</span><button className="stepper-button" aria-label="Increase advisor max assets" onClick={() => setAdvisorMaxAssets((value) => Math.min(10, value + 1))} disabled={advisorMaxAssets >= 10}>+</button></div></div>
+              </div>
+              <div className="filter-grid">
+                <label className="filter-card"><input type="checkbox" checked={includeOnlyPublicMarkets} onChange={(event) => setIncludeOnlyPublicMarkets(event.target.checked)} /> <span>Include only public markets</span></label>
+                <label className="filter-card"><input type="checkbox" checked={excludeAlternatives} onChange={(event) => setExcludeAlternatives(event.target.checked)} /> <span>Exclude alternatives</span></label>
+                <label className="filter-card"><input type="checkbox" checked={requireBond} onChange={(event) => setRequireBond(event.target.checked)} /> <span>Require at least one bond asset</span></label>
+                <label className="filter-card"><span>Minimum assets</span><input className="rf-input" type="number" min="2" max={advisorMaxAssets} value={advisorMinAssets} onChange={(event) => setMinAssets(Number(event.target.value))} /></label>
+                <label className="filter-card"><span>Max weight per asset</span><input className="rf-input" type="number" step="0.05" min="0.1" max="1" value={advisorMaxWeight} onChange={(event) => setMaxWeight(Number(event.target.value))} /></label>
+                <label className="filter-card"><span>Diversification strength</span><select className="asset-select" value={diversificationLevel} onChange={(event) => setDiversificationLevel(event.target.value)}><option value="relaxed">Relaxed</option><option value="balanced">Balanced</option><option value="strict">Strict</option></select></label>
+              </div>
+              <div className="finder-summary"><div className="summary-chip">Universe {advisorUniverse.length} assets</div><div className="summary-chip">Bond assets {advisorBondUniverse.length}</div><div className="summary-chip">{advisorFilterSummary.join(' · ')}</div></div>
+            </div>
+            <div className="panel recommendation-panel"><div className="panel-header"><h2 className="panel-title">Advisor recommendation</h2><div className="header-meta" style={{ fontSize: 10 }}>{advisorFinderResults.feasible.length ? 'best fit from broad universe' : 'closest available fit'}</div></div>{recommendation ? <><div className="donut-wrap"><Donut segments={donutSegments(recommendation)} centerTop={advisorMode === 'requiredReturn' ? fmtPct(recommendation.risk, 1) : fmtPct(recommendation.return, 1)} centerBottom={advisorMode === 'requiredReturn' ? 'RISK' : 'RETURN'} /><div className="donut-legend">{recommendation.selectedAssets.map((name, index) => <div className="donut-legend-row" key={name}><span className="legend-swatch" style={{ background: slotColors[index % slotColors.length] }} /><span className="name">{name}</span><span className="pct">{recommendation.weightPct[index]}%</span></div>)}</div></div><div className="insight-metrics"><div className="stat"><span className="stat-label">Return</span><span className="stat-value">{fmtPct(recommendation.return)}</span></div><div className="stat"><span className="stat-label">Risk</span><span className="stat-value">{fmtPct(recommendation.risk)}</span></div><div className="stat"><span className="stat-label">Sharpe</span><span className="stat-value">{Number.isFinite(recommendation.sharpe) ? fmtNum(recommendation.sharpe) : '—'}</span></div><div className="stat"><span className="stat-label">Avg corr</span><span className="stat-value">{Number.isFinite(recommendation.avgCorrelation) ? fmtNum(recommendation.avgCorrelation, 2) : '—'}</span></div><div className="stat"><span className="stat-label">Div ratio</span><span className="stat-value">{Number.isFinite(recommendation.diversificationRatio) ? fmtNum(recommendation.diversificationRatio, 2) : '—'}</span></div></div></> : <div className="empty-state">{advisorEmptyMessage}</div>}</div>
           </div>
         ) : (
           <>
@@ -585,7 +636,7 @@ const EfficientFrontierApp = () => {
 
         <div className="chart-panel">
           <div className="chart-header">
-            <div><h2 className="panel-title">{activeTab === 'build' ? 'Estimated frontier + finder result' : activeTab === 'advisor' ? 'Advisor search + recommendation' : 'Ticker frontier + recommendation'}</h2><div className="header-meta" style={{ fontSize: 10, marginTop: 8 }}>{activeTab === 'ticker' ? 'historical realized · compact ~100-day window · raw close prices (non-adjusted)' : 'sampled Monte Carlo upper envelope for client-side interactivity'}</div></div>
+            <div><h2 className="panel-title">{activeTab === 'build' ? 'Estimated frontier + finder result' : activeTab === 'advisor' ? 'Advisor search + recommendation' : 'Ticker frontier + recommendation'}</h2><div className="header-meta" style={{ fontSize: 10, marginTop: 8 }}>{activeTab === 'ticker' ? 'historical realized · compact ~100-day window · raw close prices (non-adjusted)' : activeTab === 'advisor' ? 'sampled portfolios with diversification constraints for more realistic recommendations' : 'sampled Monte Carlo upper envelope for client-side interactivity'}</div></div>
             <div className="chart-legend"><span className="legend-item"><span className="legend-dot cloud" /> Sampled cloud</span><span className="legend-item"><span className="legend-dot frontier" /> Estimated frontier</span><span className="legend-item"><span className="legend-dot cml" /> CML</span><span className="legend-item"><span className="legend-dot sharpe" /> Max Sharpe</span><span className="legend-item"><span className="legend-dot minvar" /> Min variance</span><span className="legend-item"><span className="legend-dot finder" /> {activeTab === 'build' ? 'Finder result' : activeTab === 'advisor' ? 'Advisor recommendation' : 'Ticker recommendation'}</span><span className="legend-item"><span className="legend-dot asset" /> Active assets</span></div>
           </div>
           <ResponsiveContainer width="100%" height={520}>
@@ -609,7 +660,7 @@ const EfficientFrontierApp = () => {
 
         <div className="panel">
           <div className="panel-header"><h2 className="panel-title">{activeTab === 'build' ? 'Top candidate mixes' : activeTab === 'advisor' ? 'Top advisor recommendations' : 'Top ticker portfolios'}</h2><div className="header-meta" style={{ fontSize: 10 }}>{currentFinderMode === 'requiredReturn' ? 'sorted by lowest risk' : 'sorted by highest return'} · top 10</div></div>
-          <div className="table-wrap"><table className="results-table"><thead><tr><th>#</th><th>Return</th><th>Risk</th><th>Sharpe</th><th>Assets / weights</th></tr></thead><tbody>{visibleSolutions.length > 0 ? visibleSolutions.map((point, index) => <tr key={`${point.return}-${point.risk}-${index}`} className={index === 0 ? 'active-row' : ''}><td>{index + 1}</td><td>{fmtPct(point.return)}</td><td>{fmtPct(point.risk)}</td><td>{Number.isFinite(point.sharpe) ? fmtNum(point.sharpe) : '—'}</td><td className="weights-cell" title={point.fullWeightLabel}>{point.weightLabel}</td></tr>) : <tr><td colSpan={5} className="empty-state">{activeTab === 'advisor' ? advisorEmptyMessage : activeTab === 'ticker' ? tickerStatusMessage || 'Load at least two valid tickers to compute portfolios.' : 'No portfolios available for the current settings.'}</td></tr>}</tbody></table></div>
+          <div className="table-wrap"><table className="results-table"><thead><tr><th>#</th><th>Return</th><th>Risk</th><th>Sharpe</th><th>{activeTab === 'advisor' ? 'Avg corr' : 'Assets / weights'}</th><th>{activeTab === 'advisor' ? 'Assets / weights' : ''}</th></tr></thead><tbody>{visibleSolutions.length > 0 ? visibleSolutions.map((point, index) => <tr key={`${point.return}-${point.risk}-${index}`} className={index === 0 ? 'active-row' : ''}><td>{index + 1}</td><td>{fmtPct(point.return)}</td><td>{fmtPct(point.risk)}</td><td>{Number.isFinite(point.sharpe) ? fmtNum(point.sharpe) : '—'}</td><td>{activeTab === 'advisor' ? (Number.isFinite(point.avgCorrelation) ? fmtNum(point.avgCorrelation, 2) : '—') : <span className="weights-cell" title={point.fullWeightLabel}>{point.weightLabel}</span>}</td><td>{activeTab === 'advisor' ? <span className="weights-cell" title={point.fullWeightLabel}>{point.weightLabel}</span> : ''}</td></tr>) : <tr><td colSpan={activeTab === 'advisor' ? 6 : 5} className="empty-state">{activeTab === 'advisor' ? advisorEmptyMessage : activeTab === 'ticker' ? tickerStatusMessage || 'Load at least two valid tickers to compute portfolios.' : 'No portfolios available for the current settings.'}</td></tr>}</tbody></table></div>
         </div>
 
         <div className="footer">Source · J.P. Morgan Asset Management · 2025 Long-Term Capital Market Assumptions · plus backend-fetched ticker history for Ticker Lab · sampled optimization for client-side interactivity</div>
