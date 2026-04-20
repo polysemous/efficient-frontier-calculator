@@ -11,7 +11,7 @@ import {
 } from 'recharts';
 import assetData from '../data/2025-usd/assets.json';
 import assetOrder from '../data/2025-usd/asset-order.json';
-import assetTaxonomy from '../data/2025-usd/asset-taxonomy.json';
+import assetTaxonomy from '../data/2025-usd/assets-taxonomy.json';
 import datasetMetadata from '../data/2025-usd/metadata.json';
 import correlationRowsText from '../data/2025-usd/correlation-rows.txt?raw';
 import {
@@ -356,8 +356,8 @@ const EfficientFrontierApp = () => {
   const parsedRiskFreeRate = Number(riskFreeRate);
   const riskFreeRateValue = Number.isFinite(parsedRiskFreeRate) ? parsedRiskFreeRate : defaultRiskFreeRate;
   const parsedTickerInput = useMemo(() => parseTickerInput(tickerInput), [tickerInput]);
-  const advisorMinAssets = Math.max(2, Math.min(minAssets, advisorMaxAssets));
-  const advisorMaxWeight = Math.max(0.1, Math.min(maxWeight, 1));
+  const advisorMinAssets = Number.isFinite(minAssets) ? Math.max(2, Math.min(Math.floor(minAssets), advisorMaxAssets)) : 2;
+  const advisorMaxWeight = Number.isFinite(maxWeight) ? Math.max(0.1, Math.min(maxWeight, 1)) : 0.3;
   const advisorMaxAverageCorrelation = diversificationThresholds[diversificationLevel] ?? diversificationThresholds.balanced;
 
   useEffect(() => {
@@ -593,9 +593,17 @@ const EfficientFrontierApp = () => {
                 <label className="filter-card"><input type="checkbox" checked={includeOnlyPublicMarkets} onChange={(event) => setIncludeOnlyPublicMarkets(event.target.checked)} /> <span>Include only public markets</span></label>
                 <label className="filter-card"><input type="checkbox" checked={excludeAlternatives} onChange={(event) => setExcludeAlternatives(event.target.checked)} /> <span>Exclude alternatives</span></label>
                 <label className="filter-card"><input type="checkbox" checked={requireBond} onChange={(event) => setRequireBond(event.target.checked)} /> <span>Require at least one bond asset</span></label>
-                <label className="filter-card"><span>Minimum assets</span><input className="rf-input" type="number" min="2" max={advisorMaxAssets} value={advisorMinAssets} onChange={(event) => setMinAssets(Number(event.target.value))} /></label>
-                <label className="filter-card"><span>Max weight per asset</span><input className="rf-input" type="number" step="0.05" min="0.1" max="1" value={advisorMaxWeight} onChange={(event) => setMaxWeight(Number(event.target.value))} /></label>
-                <label className="filter-card"><span>Diversification strength</span><select className="asset-select" value={diversificationLevel} onChange={(event) => setDiversificationLevel(event.target.value)}><option value="relaxed">Relaxed</option><option value="balanced">Balanced</option><option value="strict">Strict</option></select></label>
+                <label className="filter-card"><span>Minimum assets</span><input className="rf-input" type="number" min="2" max={advisorMaxAssets} value={advisorMinAssets} onChange={(event) => {
+                  const parsed = Number(event.target.value);
+                  if (!Number.isFinite(parsed)) return;
+                  setMinAssets(Math.max(2, Math.min(Math.floor(parsed), advisorMaxAssets)));
+                }} /></label>
+                <label className="filter-card"><span>Max weight per asset</span><input className="rf-input" type="number" step="0.05" min="0.1" max="1" value={advisorMaxWeight} onChange={(event) => {
+                  const parsed = Number(event.target.value);
+                  if (!Number.isFinite(parsed)) return;
+                  setMaxWeight(Math.max(0.1, Math.min(parsed, 1)));
+                }} /></label>
+                <label className="filter-card"><span>Diversification strength</span><select className="asset-select" value={diversificationLevel} onChange={(event) => setDiversificationLevel(event.target.value)}><option value="relaxed">Relaxed (≤0.75)</option><option value="balanced">Balanced (≤0.60)</option><option value="strict">Strict (≤0.45)</option></select></label>
               </div>
               <div className="finder-summary"><div className="summary-chip">Universe {advisorUniverse.length} assets</div><div className="summary-chip">Bond assets {advisorBondUniverse.length}</div><div className="summary-chip">{advisorFilterSummary.join(' · ')}</div></div>
             </div>
@@ -660,7 +668,13 @@ const EfficientFrontierApp = () => {
 
         <div className="panel">
           <div className="panel-header"><h2 className="panel-title">{activeTab === 'build' ? 'Top candidate mixes' : activeTab === 'advisor' ? 'Top advisor recommendations' : 'Top ticker portfolios'}</h2><div className="header-meta" style={{ fontSize: 10 }}>{currentFinderMode === 'requiredReturn' ? 'sorted by lowest risk' : 'sorted by highest return'} · top 10</div></div>
-          <div className="table-wrap"><table className="results-table"><thead><tr><th>#</th><th>Return</th><th>Risk</th><th>Sharpe</th><th>{activeTab === 'advisor' ? 'Avg corr' : 'Assets / weights'}</th><th>{activeTab === 'advisor' ? 'Assets / weights' : ''}</th></tr></thead><tbody>{visibleSolutions.length > 0 ? visibleSolutions.map((point, index) => <tr key={`${point.return}-${point.risk}-${index}`} className={index === 0 ? 'active-row' : ''}><td>{index + 1}</td><td>{fmtPct(point.return)}</td><td>{fmtPct(point.risk)}</td><td>{Number.isFinite(point.sharpe) ? fmtNum(point.sharpe) : '—'}</td><td>{activeTab === 'advisor' ? (Number.isFinite(point.avgCorrelation) ? fmtNum(point.avgCorrelation, 2) : '—') : <span className="weights-cell" title={point.fullWeightLabel}>{point.weightLabel}</span>}</td><td>{activeTab === 'advisor' ? <span className="weights-cell" title={point.fullWeightLabel}>{point.weightLabel}</span> : ''}</td></tr>) : <tr><td colSpan={activeTab === 'advisor' ? 6 : 5} className="empty-state">{activeTab === 'advisor' ? advisorEmptyMessage : activeTab === 'ticker' ? tickerStatusMessage || 'Load at least two valid tickers to compute portfolios.' : 'No portfolios available for the current settings.'}</td></tr>}</tbody></table></div>
+          <div className="table-wrap">
+            {activeTab === 'advisor' ? (
+              <table className="results-table"><thead><tr><th>#</th><th>Return</th><th>Risk</th><th>Sharpe</th><th>Avg corr</th><th>Assets / weights</th></tr></thead><tbody>{visibleSolutions.length > 0 ? visibleSolutions.map((point, index) => <tr key={`${point.return}-${point.risk}-${index}`} className={index === 0 ? 'active-row' : ''}><td>{index + 1}</td><td>{fmtPct(point.return)}</td><td>{fmtPct(point.risk)}</td><td>{Number.isFinite(point.sharpe) ? fmtNum(point.sharpe) : '—'}</td><td>{Number.isFinite(point.avgCorrelation) ? fmtNum(point.avgCorrelation, 2) : '—'}</td><td className="weights-cell" title={point.fullWeightLabel}>{point.weightLabel}</td></tr>) : <tr><td colSpan={6} className="empty-state">{advisorEmptyMessage}</td></tr>}</tbody></table>
+            ) : (
+              <table className="results-table"><thead><tr><th>#</th><th>Return</th><th>Risk</th><th>Sharpe</th><th>Assets / weights</th></tr></thead><tbody>{visibleSolutions.length > 0 ? visibleSolutions.map((point, index) => <tr key={`${point.return}-${point.risk}-${index}`} className={index === 0 ? 'active-row' : ''}><td>{index + 1}</td><td>{fmtPct(point.return)}</td><td>{fmtPct(point.risk)}</td><td>{Number.isFinite(point.sharpe) ? fmtNum(point.sharpe) : '—'}</td><td className="weights-cell" title={point.fullWeightLabel}>{point.weightLabel}</td></tr>) : <tr><td colSpan={5} className="empty-state">{activeTab === 'ticker' ? tickerStatusMessage || 'Load at least two valid tickers to compute portfolios.' : 'No portfolios available for the current settings.'}</td></tr>}</tbody></table>
+            )}
+          </div>
         </div>
 
         <div className="footer">Source · J.P. Morgan Asset Management · 2025 Long-Term Capital Market Assumptions · plus backend-fetched ticker history for Ticker Lab · sampled optimization for client-side interactivity</div>
