@@ -282,6 +282,51 @@ const RiskFreeShape = ({ cx, cy }) => {
   );
 };
 
+const legendDefinitions = {
+  cloud: {
+    dotClass: 'cloud',
+    label: 'Sampled cloud',
+    financial: 'The sampled cloud is the full set of trial portfolios the app generated. Each dot is one possible mix of the selected assets, showing its expected return and risk based on the current assumptions.',
+    eli5: 'Imagine tossing a bunch of recipe ideas onto the counter. Each dot is one recipe the app tried, from cautious mixes to spicy ones, so you can see the whole menu before picking favorites.'
+  },
+  frontier: {
+    dotClass: 'frontier',
+    label: 'Estimated frontier',
+    financial: 'The estimated frontier is the upper edge of the sampled cloud. It represents the best return the app found at each risk level, using the current Monte Carlo sample rather than an exact optimizer.',
+    eli5: 'If the cloud is a pile of test scores, the frontier is the top edge where the best scores live. It shows the smartest trade-offs the app found between playing safe and chasing more reward.'
+  },
+  cml: {
+    dotClass: 'cml',
+    label: 'CML',
+    financial: 'The Capital Market Line links the risk-free rate to the maximum Sharpe portfolio. It shows the best return per unit of risk available when you can combine cash with the portfolio that has the strongest risk-adjusted payoff.',
+    eli5: 'Think of this as the straightest, most efficient ramp up the hill. Starting from safe cash, it shows the cleanest path to taking on more risk without wasting effort.'
+  },
+  sharpe: {
+    dotClass: 'sharpe',
+    label: 'Max Sharpe',
+    financial: 'The maximum Sharpe portfolio is the mix with the highest excess return relative to its volatility. In plain finance terms, it is the portfolio that gives the most reward for each unit of risk in this opportunity set.',
+    eli5: "This is the app's best bang-for-your-buck pick — the mix that gets you the most reward per unit of risk you take on."
+  },
+  minvar: {
+    dotClass: 'minvar',
+    label: 'Min variance',
+    financial: 'The minimum variance portfolio is the lowest-volatility mix the app found. It focuses on smoothing the ride as much as possible, even if that means accepting a lower expected return.',
+    eli5: "This is the smoothest ride the app could find. It may not reach the biggest prize, but it works hardest to avoid the bumps."
+  },
+  finder: {
+    dotClass: 'finder',
+    label: 'Finder result',
+    financial: 'The finder result is the portfolio the app selected because it best matches your target, such as a required return or a maximum risk limit. In advisor and ticker modes, it is the recommended portfolio under those rules.',
+    eli5: "This is the app saying, \"Based on what you asked for, pick this one.\" It is the closest match to the goal you typed in."
+  },
+  asset: {
+    dotClass: 'asset',
+    label: 'Active assets',
+    financial: 'The active assets are the currently selected building blocks plotted individually on the chart. They help you compare each standalone asset with the portfolios built from combining them.',
+    eli5: 'These are the individual pieces plotted on their own, before any blending. You can see how each one behaves by itself and compare that with the combined portfolios around it.'
+  }
+};
+
 const CustomTooltip = ({ active, payload }) => {
   if (!active || !payload || payload.length === 0) return null;
   const point = payload[0]?.payload;
@@ -362,6 +407,7 @@ const EfficientFrontierApp = () => {
   const [tickerTarget, setTickerTarget] = useState('12.00');
   const [tickerFetchState, setTickerFetchState] = useState({ status: 'idle', results: [], error: '' });
   const [refreshingSymbols, setRefreshingSymbols] = useState([]);
+  const [activeLegendKey, setActiveLegendKey] = useState('cloud');
 
   const parsedRiskFreeRate = Number(riskFreeRate);
   const riskFreeRateValue = Number.isFinite(parsedRiskFreeRate) ? parsedRiskFreeRate : defaultRiskFreeRate;
@@ -570,6 +616,21 @@ const EfficientFrontierApp = () => {
       ? 'Your current advisor constraints produced no candidate portfolios. Try loosening the diversification rules, lowering the minimum asset count, or raising the weight cap.'
       : 'No portfolios available for the current settings.';
   const tickerStatusMessage = tickerFetchState.status === 'loading' ? 'Loading ticker data from your local backend…' : tickerFetchState.status === 'error' ? tickerFetchState.error : tickerDataset.error || '';
+  const finderLegendLabel = activeTab === 'build' ? 'Finder result' : activeTab === 'advisor' ? 'Advisor recommendation' : 'Ticker recommendation';
+  const activeLegendDefinition = useMemo(() => (
+    activeLegendKey === 'finder'
+      ? { ...legendDefinitions.finder, label: finderLegendLabel }
+      : legendDefinitions[activeLegendKey]
+  ), [activeLegendKey, finderLegendLabel]);
+  const chartLegendItems = useMemo(() => [
+    legendDefinitions.cloud,
+    legendDefinitions.frontier,
+    legendDefinitions.cml,
+    legendDefinitions.sharpe,
+    legendDefinitions.minvar,
+    { ...legendDefinitions.finder, label: finderLegendLabel },
+    legendDefinitions.asset
+  ], [finderLegendLabel]);
 
   return (
     <div className="app-shell">
@@ -688,7 +749,39 @@ const EfficientFrontierApp = () => {
         <div className="chart-panel">
           <div className="chart-header">
             <div><h2 className="panel-title">{activeTab === 'build' ? 'Estimated frontier + finder result' : activeTab === 'advisor' ? 'Advisor search + recommendation' : 'Ticker frontier + recommendation'}</h2><div className="header-meta" style={{ fontSize: 10, marginTop: 8 }}>{activeTab === 'ticker' ? 'historical realized · compact ~100-day window · raw close prices (non-adjusted)' : activeTab === 'advisor' ? 'sampled portfolios with diversification constraints for more realistic recommendations' : 'sampled Monte Carlo upper envelope for client-side interactivity'}</div></div>
-            <div className="chart-legend"><span className="legend-item"><span className="legend-dot cloud" /> Sampled cloud</span><span className="legend-item"><span className="legend-dot frontier" /> Estimated frontier</span><span className="legend-item"><span className="legend-dot cml" /> CML</span><span className="legend-item"><span className="legend-dot sharpe" /> Max Sharpe</span><span className="legend-item"><span className="legend-dot minvar" /> Min variance</span><span className="legend-item"><span className="legend-dot finder" /> {activeTab === 'build' ? 'Finder result' : activeTab === 'advisor' ? 'Advisor recommendation' : 'Ticker recommendation'}</span><span className="legend-item"><span className="legend-dot asset" /> Active assets</span></div>
+            <div className="chart-legend">
+              {chartLegendItems.map((item) => (
+                <button
+                  key={item.dotClass}
+                  type="button"
+                  className="legend-item legend-button"
+                  onClick={() => setActiveLegendKey(item.dotClass)}
+                  aria-pressed={activeLegendKey === item.dotClass}
+                >
+                  <span className={`legend-dot ${item.dotClass}`} />
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="legend-explainer" role="status" aria-live="polite">
+            <div className="legend-explainer-header">
+              <span className={`legend-dot ${activeLegendDefinition.dotClass}`} />
+              <div>
+                <div className="legend-explainer-label">{activeLegendDefinition.label}</div>
+                <div className="legend-explainer-hint">Tap any legend item to switch explanations. Hover a chart point for its numeric detail.</div>
+              </div>
+            </div>
+            <div className="legend-explainer-grid">
+              <div className="legend-explainer-card">
+                <div className="legend-explainer-title">Technical</div>
+                <p>{activeLegendDefinition.financial}</p>
+              </div>
+              <div className="legend-explainer-card">
+                <div className="legend-explainer-title">ELI5</div>
+                <p>{activeLegendDefinition.eli5}</p>
+              </div>
+            </div>
           </div>
           <ResponsiveContainer width="100%" height={520}>
             <ScatterChart margin={{ top: 20, right: 30, bottom: 50, left: 50 }}>
