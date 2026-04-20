@@ -120,6 +120,29 @@ const getReturnField = (asset) => {
   return asset.compoundReturn2024;
 };
 
+const averagePairwiseCorrelation = (selectedAssets, correlationMatrix) => {
+  if (selectedAssets.length <= 1) return 0;
+  let total = 0;
+  let pairs = 0;
+  for (let i = 0; i < selectedAssets.length; i += 1) {
+    for (let j = i + 1; j < selectedAssets.length; j += 1) {
+      const corr = correlationMatrix[selectedAssets[i]]?.[selectedAssets[j]];
+      if (typeof corr !== 'number' || Number.isNaN(corr)) {
+        throw new Error(`Missing correlation: ${selectedAssets[i]} vs ${selectedAssets[j]}`);
+      }
+      total += corr;
+      pairs += 1;
+    }
+  }
+  return pairs > 0 ? total / pairs : 0;
+};
+
+const diversificationRatio = (weights, vols, portfolioVolatility) => {
+  if (portfolioVolatility <= 0) return 0;
+  const weightedAverageVol = weights.reduce((sum, weight, index) => sum + weight * vols[index], 0);
+  return weightedAverageVol / portfolioVolatility;
+};
+
 const evaluatePortfolio = (weights, selectedAssets, assetData, correlationMatrix, riskFreeRate) => {
   const returns = selectedAssets.map((assetName) => getReturnField(assetData[assetName]) / 100);
   const vols = selectedAssets.map((assetName) => assetData[assetName].volatility / 100);
@@ -141,17 +164,37 @@ const evaluatePortfolio = (weights, selectedAssets, assetData, correlationMatrix
   const sharpe = risk > 0 ? (portfolioReturn - riskFreeRate / 100) / risk : Number.NEGATIVE_INFINITY;
   const weightPct = roundWeightsToTenths(weights);
   const fullWeightLabel = selectedAssets.map((assetName, index) => `${assetName}: ${weightPct[index]}%`).join(' · ');
+  const avgCorrelation = averagePairwiseCorrelation(selectedAssets, correlationMatrix);
+  const divRatio = diversificationRatio(weights, vols, risk);
 
   return {
     return: portfolioReturn * 100,
     risk: risk * 100,
     sharpe,
+    avgCorrelation,
+    diversificationRatio: divRatio,
     weights,
     weightPct,
     selectedAssets,
     weightLabel: compactWeightLabel(selectedAssets, weightPct),
     fullWeightLabel
   };
+};
+
+const portfolioMeetsConstraints = ({
+  selectedAssets,
+  weights,
+  correlationMatrix,
+  minAssetsInPortfolio = 1,
+  maxWeightPerAsset = 1,
+  maxAverageCorrelation = 1
+}) => {
+  if (selectedAssets.length < minAssetsInPortfolio) return false;
+  if (weights.some((weight) => weight > maxWeightPerAsset + 1e-9)) return false;
+  if (selectedAssets.length > 1 && averagePairwiseCorrelation(selectedAssets, correlationMatrix) > maxAverageCorrelation + 1e-9) {
+    return false;
+  }
+  return true;
 };
 
 export const generatePortfolioSet = ({
@@ -207,6 +250,9 @@ export const generatePortfolioSet = ({
 export const generateSparsePortfolioSet = ({
   candidateAssets,
   maxAssetsInPortfolio,
+  minAssetsInPortfolio = 1,
+  maxWeightPerAsset = 1,
+  maxAverageCorrelation = 1,
   assetData,
   correlationMatrix,
   riskFreeRate,
@@ -215,14 +261,39 @@ export const generateSparsePortfolioSet = ({
 }) => {
   if (candidateAssets.length === 0) return [];
 
-  const maxSize = Math.max(1, Math.min(maxAssetsInPortfolio, candidateAssets.length));
+  const normalizedMaxAssets = Number.isFinite(maxAssetsInPortfolio)
+    ? Math.max(1, Math.floor(maxAssetsInPortfolio))
+    : candidateAssets.length;
+  const normalizedMinAssets = Number.isFinite(minAssetsInPortfolio)
+    ? Math.max(1, Math.floor(minAssetsInPortfolio))
+    : 1;
+  const normalizedMaxWeight = Number.isFinite(maxWeightPerAsset)
+    ? Math.max(0.1, Math.min(maxWeightPerAsset, 1))
+    : 1;
+  const normalizedMaxAverageCorrelation = Number.isFinite(maxAverageCorrelation)
+    ? Math.max(-1, Math.min(maxAverageCorrelation, 1))
+    : 1;
+
+  const minSize = Math.max(1, Math.min(normalizedMinAssets, candidateAssets.length, normalizedMaxAssets));
+  const maxSize = Math.max(minSize, Math.min(normalizedMaxAssets, candidateAssets.length));
   const random = createSeededRandom(
-    `${candidateAssets.join('|')}|${riskFreeRate}|${sampleCount}|${maxSize}|${requiredAssetsPool.join('|')}|sparse`
+    `${candidateAssets.join('|')}|${riskFreeRate}|${sampleCount}|${minSize}|${maxSize}|${requiredAssetsPool.join('|')}|${normalizedMaxWeight}|${normalizedMaxAverageCorrelation}|sparse`
   );
   const portfolios = [];
   const seen = new Set();
 
   const addPortfolio = (selectedAssets, weights) => {
+    if (!portfolioMeetsConstraints({
+      selectedAssets,
+      weights,
+      correlationMatrix,
+      minAssetsInPortfolio: minSize,
+      maxWeightPerAsset: normalizedMaxWeight,
+      maxAverageCorrelation: normalizedMaxAverageCorrelation
+    })) {
+      return;
+    }
+
     const key = canonicalPortfolioKey(selectedAssets, weights);
     if (seen.has(key)) return;
     seen.add(key);
@@ -231,13 +302,11 @@ export const generateSparsePortfolioSet = ({
     );
   };
 
-  candidateAssets.forEach((assetName) => addPortfolio([assetName], [1]));
-
-  for (let i = 0; i < Math.min(candidateAssets.length, maxSize); i += 1) {
-    addPortfolio(candidateAssets.slice(0, i + 1), Array(i + 1).fill(1 / (i + 1)));
+  for (let i = minSize; i <= Math.min(candidateAssets.length, maxSize); i += 1) {
+    addPortfolio(candidateAssets.slice(0, i), Array(i).fill(1 / i));
   }
 
-  if (candidateAssets.length >= 2) {
+  if (minSize <= 2 && candidateAssets.length >= 2) {
     for (let a = 0; a < candidateAssets.length; a += 1) {
       for (let b = a + 1; b < candidateAssets.length; b += 1) {
         for (let step = 0; step <= 10; step += 1) {
@@ -248,7 +317,9 @@ export const generateSparsePortfolioSet = ({
   }
 
   for (let i = 0; i < sampleCount; i += 1) {
-    const subsetSize = maxSize === 1 ? 1 : Math.max(2, Math.min(maxSize, 2 + Math.floor(random() * maxSize)));
+    const subsetSize = minSize === maxSize
+      ? minSize
+      : minSize + Math.floor(random() * (maxSize - minSize + 1));
     const subsetAssets = sampleSubset(candidateAssets, subsetSize, random, requiredAssetsPool);
     addPortfolio(subsetAssets, randomWeights(subsetAssets.length, random));
   }
