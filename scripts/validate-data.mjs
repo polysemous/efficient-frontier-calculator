@@ -1,7 +1,11 @@
 import fs from 'fs';
 import path from 'path';
 
-const datasetName = process.argv[2] ?? '2026-usd';
+const datasetName = process.argv[2];
+if (!datasetName) {
+  console.error('Usage: node scripts/validate-data.mjs <dataset-name>');
+  process.exit(1);
+}
 const datasetDir = path.join('data', datasetName);
 const metadataPath = path.join(datasetDir, 'metadata.json');
 const assetsPath = path.join(datasetDir, 'assets.json');
