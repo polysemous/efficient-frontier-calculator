@@ -1,0 +1,238 @@
+{
+  "AC Asia ex-Japan Equity": {
+    "class": "equity",
+    "subclass": "equity_em"
+  },
+  "AC World Equity": {
+    "class": "equity",
+    "subclass": "equity_global"
+  },
+  "Asia Pacific Core Real Estate": {
+    "class": "alt_private",
+    "subclass": "alt_real_estate_private"
+  },
+  "Chinese Domestic Equity": {
+    "class": "equity",
+    "subclass": "equity_em"
+  },
+  "Commercial Mortgage Loans": {
+    "class": "alt_private",
+    "subclass": "alt_private_credit"
+  },
+  "Commodities": {
+    "class": "alt_public",
+    "subclass": "alt_commodity"
+  },
+  "Direct Lending": {
+    "class": "alt_private",
+    "subclass": "alt_private_credit"
+  },
+  "Diversified Hedge Funds": {
+    "class": "alt_private",
+    "subclass": "alt_hedge_fund"
+  },
+  "EAFE Equity": {
+    "class": "equity",
+    "subclass": "equity_dm"
+  },
+  "Emerging Markets Corporate Bonds": {
+    "class": "bond",
+    "subclass": "bond_credit_em"
+  },
+  "Emerging Markets Equity": {
+    "class": "equity",
+    "subclass": "equity_em"
+  },
+  "Emerging Markets Local Currency Debt": {
+    "class": "bond",
+    "subclass": "bond_govt_em"
+  },
+  "Emerging Markets Sovereign Debt": {
+    "class": "bond",
+    "subclass": "bond_govt_em"
+  },
+  "Euro Area Large Cap": {
+    "class": "equity",
+    "subclass": "equity_dm"
+  },
+  "European Core Real Estate": {
+    "class": "alt_private",
+    "subclass": "alt_real_estate_private"
+  },
+  "Event Driven Hedge Funds": {
+    "class": "alt_private",
+    "subclass": "alt_hedge_fund"
+  },
+  "Global Convertible Bonds hedged": {
+    "class": "bond",
+    "subclass": "bond_convertible"
+  },
+  "Global Core Infrastructure": {
+    "class": "alt_private",
+    "subclass": "alt_infra"
+  },
+  "Global Core Transport": {
+    "class": "alt_private",
+    "subclass": "alt_transport"
+  },
+  "Global Timberland": {
+    "class": "alt_private",
+    "subclass": "alt_timber"
+  },
+  "Gold": {
+    "class": "alt_public",
+    "subclass": "alt_gold"
+  },
+  "Hong Kong Equity": {
+    "class": "equity",
+    "subclass": "equity_dm"
+  },
+  "Japanese Equity": {
+    "class": "equity",
+    "subclass": "equity_dm"
+  },
+  "Long Bias Hedge Funds": {
+    "class": "alt_private",
+    "subclass": "alt_hedge_fund"
+  },
+  "Macro Hedge Funds": {
+    "class": "alt_private",
+    "subclass": "alt_hedge_fund"
+  },
+  "Private Equity": {
+    "class": "alt_private",
+    "subclass": "alt_private_equity"
+  },
+  "Relative Value Hedge Funds": {
+    "class": "alt_private",
+    "subclass": "alt_hedge_fund"
+  },
+  "TIPS": {
+    "class": "bond",
+    "subclass": "bond_tips"
+  },
+  "U.S. Aggregate Bonds": {
+    "class": "bond",
+    "subclass": "bond_aggregate"
+  },
+  "U.S. Cash": {
+    "class": "cash",
+    "subclass": "cash"
+  },
+  "U.S. Core Real Estate": {
+    "class": "alt_private",
+    "subclass": "alt_real_estate_private"
+  },
+  "U.S. Equity Dividend Yield Factor": {
+    "class": "equity",
+    "subclass": "equity_us_factor"
+  },
+  "U.S. Equity Minimum Volatility Factor": {
+    "class": "equity",
+    "subclass": "equity_us_factor"
+  },
+  "U.S. Equity Momentum Factor": {
+    "class": "equity",
+    "subclass": "equity_us_factor"
+  },
+  "U.S. Equity Quality Factor": {
+    "class": "equity",
+    "subclass": "equity_us_factor"
+  },
+  "U.S. Equity Value Factor": {
+    "class": "equity",
+    "subclass": "equity_us_factor"
+  },
+  "U.S. High Yield Bonds": {
+    "class": "bond",
+    "subclass": "bond_credit_us"
+  },
+  "U.S. Inflation": {
+    "class": "reference",
+    "subclass": "reference"
+  },
+  "U.S. Intermediate Treasuries": {
+    "class": "bond",
+    "subclass": "bond_govt_us"
+  },
+  "U.S. Inv Grade Corporate Bonds": {
+    "class": "bond",
+    "subclass": "bond_credit_us"
+  },
+  "U.S. Large Cap": {
+    "class": "equity",
+    "subclass": "equity_us_broad"
+  },
+  "U.S. Leveraged Loans": {
+    "class": "bond",
+    "subclass": "bond_credit_us"
+  },
+  "U.S. Long Corporate Bonds": {
+    "class": "bond",
+    "subclass": "bond_credit_us"
+  },
+  "U.S. Long Duration Government/Credit": {
+    "class": "bond",
+    "subclass": "bond_gov_credit_us"
+  },
+  "U.S. Long Treasuries": {
+    "class": "bond",
+    "subclass": "bond_govt_us"
+  },
+  "U.S. Mid Cap": {
+    "class": "equity",
+    "subclass": "equity_us_broad"
+  },
+  "U.S. Muni 1-15 Yr Blend": {
+    "class": "bond",
+    "subclass": "bond_muni"
+  },
+  "U.S. Muni High Yield": {
+    "class": "bond",
+    "subclass": "bond_muni"
+  },
+  "U.S. REITs": {
+    "class": "alt_public",
+    "subclass": "alt_real_estate_public"
+  },
+  "U.S. Securitized": {
+    "class": "bond",
+    "subclass": "bond_securitized"
+  },
+  "U.S. Short Duration Government/Credit": {
+    "class": "bond",
+    "subclass": "bond_gov_credit_us"
+  },
+  "U.S. Small Cap": {
+    "class": "equity",
+    "subclass": "equity_us_broad"
+  },
+  "U.S. Value-Added Real Estate": {
+    "class": "alt_private",
+    "subclass": "alt_real_estate_private"
+  },
+  "UK Large Cap": {
+    "class": "equity",
+    "subclass": "equity_dm"
+  },
+  "Venture Capital": {
+    "class": "alt_private",
+    "subclass": "alt_private_equity"
+  },
+  "World ex-U.S. Government Bonds": {
+    "class": "bond",
+    "subclass": "bond_govt_intl"
+  },
+  "World ex-U.S. Government Bonds hedged": {
+    "class": "bond",
+    "subclass": "bond_govt_intl"
+  },
+  "World Government Bonds": {
+    "class": "bond",
+    "subclass": "bond_govt_intl"
+  },
+  "World Government Bonds hedged": {
+    "class": "bond",
+    "subclass": "bond_govt_intl"
+  }
+}

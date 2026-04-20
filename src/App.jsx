@@ -9,11 +9,11 @@ import {
   YAxis,
   Label
 } from 'recharts';
-import assetData from '../data/2025-usd/assets.json';
-import assetOrder from '../data/2025-usd/asset-order.json';
-import assetTaxonomy from '../data/2025-usd/assets-taxonomy.json';
-import datasetMetadata from '../data/2025-usd/metadata.json';
-import correlationRowsText from '../data/2025-usd/correlation-rows.txt?raw';
+import assetData from '../data/2026-usd/assets.json';
+import assetOrder from '../data/2026-usd/asset-order.json';
+import assetTaxonomy from '../data/2026-usd/asset-taxonomy.json';
+import datasetMetadata from '../data/2026-usd/metadata.json';
+import correlationRowsText from '../data/2026-usd/correlation-rows.txt?raw';
 import {
   buildCorrelationMatrix,
   chooseAdvisorSampleCount,
@@ -39,7 +39,14 @@ const preferredDefaults = [
   'U.S. Mid Cap',
   'U.S. High Yield Bonds'
 ].filter((name) => investableAssetNames.includes(name));
-const defaultRiskFreeRate = assetData['U.S. Cash']?.compoundReturn2024 ?? 3.1;
+const getStrategicReturn = (asset) => asset.arithmeticReturn2026 ?? asset.compoundReturn2026 ?? asset.compoundReturn2025 ?? asset.compoundReturn2024;
+const defaultRiskFreeRate = (() => {
+  const cashReturn = getStrategicReturn(assetData['U.S. Cash'] ?? {});
+  if (typeof cashReturn !== 'number' || Number.isNaN(cashReturn)) {
+    throw new Error('Missing U.S. Cash return assumption in the active LTCMA dataset');
+  }
+  return cashReturn;
+})();
 const slotColors = ['#34d399', '#22d3ee', '#f4c35a', '#c084fc', '#f87171', '#60a5fa', '#f97316', '#a3e635', '#f472b6', '#93c5fd'];
 const correlationMatrix = buildCorrelationMatrix(assetOrder, correlationRowsText);
 const diversificationThresholds = {
@@ -56,7 +63,7 @@ const isBondAsset = (assetName) => assetTaxonomy[assetName]?.class === 'bond';
 const isPrivateAlternativeAsset = (assetName) => assetTaxonomy[assetName]?.class === 'alt_private';
 const isAlternativeAsset = (assetName) => ['alt_public', 'alt_private'].includes(assetTaxonomy[assetName]?.class);
 
-const getDisplayedReturn = (assetName) => assetData[assetName].compoundReturn2024;
+const getDisplayedReturn = (assetName) => getStrategicReturn(assetData[assetName]);
 const getDisplayedVolatility = (assetName) => assetData[assetName].volatility;
 
 const buildInitialSelection = (count) => {
@@ -556,7 +563,7 @@ const EfficientFrontierApp = () => {
               <button className={`tab-button ${activeTab === 'advisor' ? 'active' : ''}`} onClick={() => setActiveTab('advisor')}>Choose for Me</button>
               <button className={`tab-button ${activeTab === 'ticker' ? 'active' : ''}`} onClick={() => setActiveTab('ticker')}>Ticker Lab</button>
             </div>
-            <div className="rf-card compact"><div className="asset-label">Risk-free rate</div><div className="rf-input-row"><input className="rf-input" type="number" step="0.01" min="0" max="15" value={riskFreeRate} onChange={(e) => setRiskFreeRate(e.target.value)} /><span className="rf-suffix">%</span></div><div className="rf-hint">Global across all tabs · default U.S. Cash {defaultRiskFreeRate.toFixed(2)}%</div></div>
+            <div className="rf-card compact"><div className="asset-label">Risk-free rate</div><div className="rf-input-row"><input className="rf-input" type="number" step="0.01" min="0" max="15" value={riskFreeRate} onChange={(e) => setRiskFreeRate(e.target.value)} /><span className="rf-suffix">%</span></div><div className="rf-hint">Global across all tabs · default U.S. Cash {defaultRiskFreeRate.toFixed(2)}% · optimizer uses arithmetic 2026 returns when available</div></div>
           </div>
         </div>
 
@@ -677,7 +684,7 @@ const EfficientFrontierApp = () => {
           </div>
         </div>
 
-        <div className="footer">Source · J.P. Morgan Asset Management · 2025 Long-Term Capital Market Assumptions · plus backend-fetched ticker history for Ticker Lab · sampled optimization for client-side interactivity</div>
+        <div className="footer">Source · {datasetMetadata.datasetName} · plus backend-fetched ticker history for Ticker Lab · sampled optimization for client-side interactivity</div>
       </div>
     </div>
   );
