@@ -1,0 +1,415 @@
+{
+  "U.S. Inflation": {
+    "arithmeticReturn2026": 2.52,
+    "compoundReturn2025": 2.4,
+    "compoundReturn2026": 2.5,
+    "volatility": 1.77,
+    "compoundReturn2024": 2.4
+  },
+  "U.S. Cash": {
+    "arithmeticReturn2026": 3.1,
+    "compoundReturn2025": 3.1,
+    "compoundReturn2026": 3.1,
+    "volatility": 0.67,
+    "compoundReturn2024": 3.1
+  },
+  "U.S. Intermediate Treasuries": {
+    "arithmeticReturn2026": 4.06,
+    "compoundReturn2025": 3.8,
+    "compoundReturn2026": 4,
+    "volatility": 3.48,
+    "compoundReturn2024": 3.8
+  },
+  "U.S. Long Treasuries": {
+    "arithmeticReturn2026": 5.69,
+    "compoundReturn2025": 4.3,
+    "compoundReturn2026": 4.9,
+    "volatility": 13.02,
+    "compoundReturn2024": 4.3
+  },
+  "TIPS": {
+    "arithmeticReturn2026": 4.47,
+    "compoundReturn2025": 4.1,
+    "compoundReturn2026": 4.3,
+    "volatility": 5.88,
+    "compoundReturn2024": 4.1
+  },
+  "U.S. Aggregate Bonds": {
+    "arithmeticReturn2026": 4.91,
+    "compoundReturn2025": 4.6,
+    "compoundReturn2026": 4.8,
+    "volatility": 4.76,
+    "compoundReturn2024": 4.6
+  },
+  "U.S. Securitized": {
+    "arithmeticReturn2026": 5.28,
+    "compoundReturn2025": 4.9,
+    "compoundReturn2026": 5.2,
+    "volatility": 4.19,
+    "compoundReturn2024": 4.9
+  },
+  "U.S. Short Duration Government/Credit": {
+    "arithmeticReturn2026": 4.01,
+    "compoundReturn2025": 3.9,
+    "compoundReturn2026": 4,
+    "volatility": 1.63,
+    "compoundReturn2024": 3.9
+  },
+  "U.S. Long Duration Government/Credit": {
+    "arithmeticReturn2026": 5.81,
+    "compoundReturn2025": 4.7,
+    "compoundReturn2026": 5.2,
+    "volatility": 11.45,
+    "compoundReturn2024": 4.7
+  },
+  "U.S. Inv Grade Corporate Bonds": {
+    "arithmeticReturn2026": 5.46,
+    "compoundReturn2025": 5,
+    "compoundReturn2026": 5.2,
+    "volatility": 7.39,
+    "compoundReturn2024": 5
+  },
+  "U.S. Long Corporate Bonds": {
+    "arithmeticReturn2026": 6.1,
+    "compoundReturn2025": 4.9,
+    "compoundReturn2026": 5.4,
+    "volatility": 12.28,
+    "compoundReturn2024": 4.9
+  },
+  "U.S. High Yield Bonds": {
+    "arithmeticReturn2026": 6.46,
+    "compoundReturn2025": 6.1,
+    "compoundReturn2026": 6.1,
+    "volatility": 8.74,
+    "compoundReturn2024": 6.1
+  },
+  "U.S. Leveraged Loans": {
+    "arithmeticReturn2026": 6.88,
+    "compoundReturn2025": 6.6,
+    "compoundReturn2026": 6.6,
+    "volatility": 7.7,
+    "compoundReturn2024": 6.6
+  },
+  "World Government Bonds hedged": {
+    "arithmeticReturn2026": 4.38,
+    "compoundReturn2025": 3.9,
+    "compoundReturn2026": 4.3,
+    "volatility": 4.02,
+    "compoundReturn2024": 3.9
+  },
+  "World Government Bonds": {
+    "arithmeticReturn2026": 4.55,
+    "compoundReturn2025": 4.2,
+    "compoundReturn2026": 4.3,
+    "volatility": 7.27,
+    "compoundReturn2024": 4.2
+  },
+  "World ex-U.S. Government Bonds hedged": {
+    "arithmeticReturn2026": 4.27,
+    "compoundReturn2025": 3.8,
+    "compoundReturn2026": 4.2,
+    "volatility": 3.95,
+    "compoundReturn2024": 3.8
+  },
+  "World ex-U.S. Government Bonds": {
+    "arithmeticReturn2026": 4.69,
+    "compoundReturn2025": 4.2,
+    "compoundReturn2026": 4.3,
+    "volatility": 9.06,
+    "compoundReturn2024": 4.2
+  },
+  "Emerging Markets Sovereign Debt": {
+    "arithmeticReturn2026": 6.66,
+    "compoundReturn2025": 5.8,
+    "compoundReturn2026": 6.3,
+    "volatility": 8.83,
+    "compoundReturn2024": 5.8
+  },
+  "Emerging Markets Local Currency Debt": {
+    "arithmeticReturn2026": 7.38,
+    "compoundReturn2025": 6.1,
+    "compoundReturn2026": 6.7,
+    "volatility": 12.12,
+    "compoundReturn2024": 6.1
+  },
+  "Emerging Markets Corporate Bonds": {
+    "arithmeticReturn2026": 6.37,
+    "compoundReturn2025": 6.2,
+    "compoundReturn2026": 6.1,
+    "volatility": 7.64,
+    "compoundReturn2024": 6.2
+  },
+  "U.S. Muni 1-15 Yr Blend": {
+    "arithmeticReturn2026": 3.88,
+    "compoundReturn2025": 3.6,
+    "compoundReturn2026": 3.8,
+    "volatility": 4.16,
+    "compoundReturn2024": 3.6
+  },
+  "U.S. Muni High Yield": {
+    "arithmeticReturn2026": 5.66,
+    "compoundReturn2025": 4.7,
+    "compoundReturn2026": 5.3,
+    "volatility": 8.72,
+    "compoundReturn2024": 4.7
+  },
+  "U.S. Large Cap": {
+    "arithmeticReturn2026": 7.94,
+    "compoundReturn2025": 6.7,
+    "compoundReturn2026": 6.7,
+    "volatility": 16.47,
+    "compoundReturn2024": 6.7
+  },
+  "U.S. Mid Cap": {
+    "arithmeticReturn2026": 8.55,
+    "compoundReturn2025": 7,
+    "compoundReturn2026": 7,
+    "volatility": 18.56,
+    "compoundReturn2024": 7
+  },
+  "U.S. Small Cap": {
+    "arithmeticReturn2026": 8.89,
+    "compoundReturn2025": 6.9,
+    "compoundReturn2026": 6.9,
+    "volatility": 21.1,
+    "compoundReturn2024": 6.9
+  },
+  "Euro Area Large Cap": {
+    "arithmeticReturn2026": 9.94,
+    "compoundReturn2025": 8.5,
+    "compoundReturn2026": 7.8,
+    "volatility": 22.04,
+    "compoundReturn2024": 8.5
+  },
+  "Japanese Equity": {
+    "arithmeticReturn2026": 9.91,
+    "compoundReturn2025": 9,
+    "compoundReturn2026": 8.8,
+    "volatility": 15.77,
+    "compoundReturn2024": 9
+  },
+  "Hong Kong Equity": {
+    "arithmeticReturn2026": 9.43,
+    "compoundReturn2025": 7.4,
+    "compoundReturn2026": 7.4,
+    "volatility": 21.37,
+    "compoundReturn2024": 7.4
+  },
+  "UK Large Cap": {
+    "arithmeticReturn2026": 7.99,
+    "compoundReturn2025": 7.8,
+    "compoundReturn2026": 6.6,
+    "volatility": 17.52,
+    "compoundReturn2024": 7.8
+  },
+  "EAFE Equity": {
+    "arithmeticReturn2026": 8.9,
+    "compoundReturn2025": 8.1,
+    "compoundReturn2026": 7.5,
+    "volatility": 17.63,
+    "compoundReturn2024": 8.1
+  },
+  "Chinese Domestic Equity": {
+    "arithmeticReturn2026": 11.23,
+    "compoundReturn2025": 7.8,
+    "compoundReturn2026": 7.7,
+    "volatility": 28.7,
+    "compoundReturn2024": 7.8
+  },
+  "Emerging Markets Equity": {
+    "arithmeticReturn2026": 9.74,
+    "compoundReturn2025": 7.2,
+    "compoundReturn2026": 7.8,
+    "volatility": 20.93,
+    "compoundReturn2024": 7.2
+  },
+  "AC Asia ex-Japan Equity": {
+    "arithmeticReturn2026": 9.83,
+    "compoundReturn2025": 7.2,
+    "compoundReturn2026": 7.9,
+    "volatility": 20.84,
+    "compoundReturn2024": 7.2
+  },
+  "AC World Equity": {
+    "arithmeticReturn2026": 8.28,
+    "compoundReturn2025": 7.1,
+    "compoundReturn2026": 7,
+    "volatility": 16.78,
+    "compoundReturn2024": 7.1
+  },
+  "U.S. Equity Value Factor": {
+    "arithmeticReturn2026": 9.11,
+    "compoundReturn2025": 7.7,
+    "compoundReturn2026": 7.7,
+    "volatility": 17.7,
+    "compoundReturn2024": 7.7
+  },
+  "U.S. Equity Momentum Factor": {
+    "arithmeticReturn2026": 8.91,
+    "compoundReturn2025": 7.6,
+    "compoundReturn2026": 7.6,
+    "volatility": 17.06,
+    "compoundReturn2024": 7.6
+  },
+  "U.S. Equity Quality Factor": {
+    "arithmeticReturn2026": 7.64,
+    "compoundReturn2025": 6.7,
+    "compoundReturn2026": 6.6,
+    "volatility": 15.11,
+    "compoundReturn2024": 6.7
+  },
+  "U.S. Equity Minimum Volatility Factor": {
+    "arithmeticReturn2026": 7.79,
+    "compoundReturn2025": 7,
+    "compoundReturn2026": 7,
+    "volatility": 13.16,
+    "compoundReturn2024": 7
+  },
+  "U.S. Equity Dividend Yield Factor": {
+    "arithmeticReturn2026": 8.71,
+    "compoundReturn2025": 7.7,
+    "compoundReturn2026": 7.5,
+    "volatility": 16.36,
+    "compoundReturn2024": 7.7
+  },
+  "Global Convertible Bonds hedged": {
+    "arithmeticReturn2026": 7.28,
+    "compoundReturn2025": 6.7,
+    "compoundReturn2026": 6.7,
+    "volatility": 11.17,
+    "compoundReturn2024": 6.7
+  },
+  "U.S. Core Real Estate": {
+    "arithmeticReturn2026": 8.79,
+    "compoundReturn2025": 8.1,
+    "compoundReturn2026": 8.2,
+    "volatility": 11.39,
+    "compoundReturn2024": 8.1
+  },
+  "U.S. Value-Added Real Estate": {
+    "arithmeticReturn2026": 11.72,
+    "compoundReturn2025": 10.1,
+    "compoundReturn2026": 10.1,
+    "volatility": 19.23,
+    "compoundReturn2024": 10.1
+  },
+  "European Core Real Estate": {
+    "arithmeticReturn2026": 7.77,
+    "compoundReturn2025": 7.6,
+    "compoundReturn2026": 6.9,
+    "volatility": 13.75,
+    "compoundReturn2024": 7.6
+  },
+  "Asia Pacific Core Real Estate": {
+    "arithmeticReturn2026": 9.55,
+    "compoundReturn2025": 8.1,
+    "compoundReturn2026": 8.4,
+    "volatility": 15.98,
+    "compoundReturn2024": 8.1
+  },
+  "U.S. REITs": {
+    "arithmeticReturn2026": 10.15,
+    "compoundReturn2025": 8,
+    "compoundReturn2026": 8.8,
+    "volatility": 17.4,
+    "compoundReturn2024": 8
+  },
+  "Commercial Mortgage Loans": {
+    "arithmeticReturn2026": 6.5,
+    "compoundReturn2025": 6.4,
+    "compoundReturn2026": 6.2,
+    "volatility": 7.94,
+    "compoundReturn2024": 6.4
+  },
+  "Global Core Infrastructure": {
+    "arithmeticReturn2026": 6.99,
+    "compoundReturn2025": 6.3,
+    "compoundReturn2026": 6.5,
+    "volatility": 10.25,
+    "compoundReturn2024": 6.3
+  },
+  "Global Core Transport": {
+    "arithmeticReturn2026": 8.64,
+    "compoundReturn2025": 7.8,
+    "compoundReturn2026": 7.9,
+    "volatility": 12.77,
+    "compoundReturn2024": 7.8
+  },
+  "Global Timberland": {
+    "arithmeticReturn2026": 6.71,
+    "compoundReturn2025": 5.3,
+    "compoundReturn2026": 6.3,
+    "volatility": 9.38,
+    "compoundReturn2024": 5.3
+  },
+  "Commodities": {
+    "arithmeticReturn2026": 6.15,
+    "compoundReturn2025": 3.8,
+    "compoundReturn2026": 4.6,
+    "volatility": 18.32,
+    "compoundReturn2024": 3.8
+  },
+  "Gold": {
+    "arithmeticReturn2026": 6.78,
+    "compoundReturn2025": 4,
+    "compoundReturn2026": 5.5,
+    "volatility": 16.68,
+    "compoundReturn2024": 4
+  },
+  "Private Equity": {
+    "arithmeticReturn2026": 11.91,
+    "compoundReturn2025": 9.9,
+    "compoundReturn2026": 10.2,
+    "volatility": 19.78,
+    "compoundReturn2024": 9.9
+  },
+  "Venture Capital": {
+    "arithmeticReturn2026": 10.66,
+    "compoundReturn2025": 8.8,
+    "compoundReturn2026": 8.5,
+    "volatility": 22.2,
+    "compoundReturn2024": 8.8
+  },
+  "Diversified Hedge Funds": {
+    "arithmeticReturn2026": 5.46,
+    "compoundReturn2025": 4.9,
+    "compoundReturn2026": 5.3,
+    "volatility": 5.75,
+    "compoundReturn2024": 4.9
+  },
+  "Event Driven Hedge Funds": {
+    "arithmeticReturn2026": 5.5,
+    "compoundReturn2025": 4.9,
+    "compoundReturn2026": 5.2,
+    "volatility": 8.01,
+    "compoundReturn2024": 4.9
+  },
+  "Long Bias Hedge Funds": {
+    "arithmeticReturn2026": 6.08,
+    "compoundReturn2025": 5,
+    "compoundReturn2026": 5.5,
+    "volatility": 11.12,
+    "compoundReturn2024": 5
+  },
+  "Relative Value Hedge Funds": {
+    "arithmeticReturn2026": 5.84,
+    "compoundReturn2025": 5,
+    "compoundReturn2026": 5.7,
+    "volatility": 5.36,
+    "compoundReturn2024": 5
+  },
+  "Macro Hedge Funds": {
+    "arithmeticReturn2026": 4.33,
+    "compoundReturn2025": 3.8,
+    "compoundReturn2026": 4.1,
+    "volatility": 6.97,
+    "compoundReturn2024": 3.8
+  },
+  "Direct Lending": {
+    "arithmeticReturn2026": 8.59,
+    "compoundReturn2025": 8.2,
+    "compoundReturn2026": 7.7,
+    "volatility": 14.01,
+    "compoundReturn2024": 8.2
+  }
+}

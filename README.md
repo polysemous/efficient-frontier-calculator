@@ -127,6 +127,6 @@ The UI will warn if it detects unusually large raw price moves that may indicate
 ---
 
 ## Data Source
-J.P. Morgan Asset Management, 2025 Long-Term Capital Market Assumptions
+J.P. Morgan Asset Management, 2026 Long-Term Capital Market Assumptions (U.S. dollar assumptions, as of September 30, 2025)
 
 Ticker Lab additionally uses backend-fetched Alpha Vantage market data.
