@@ -555,13 +555,29 @@ const EfficientFrontierApp = () => {
     ? currentSet.activeAssets
     : recommendation?.selectedAssets ?? ms?.selectedAssets ?? currentSet.activeAssets ?? [];
 
-  const highlightedAssets = highlightedAssetNames.map((name, index) => ({
-    name,
-    return: activeTab === 'ticker' && currentSet.tickerAssetData?.[name] ? currentSet.tickerAssetData[name].compoundReturn2024 : getDisplayedReturn(name),
-    risk: activeTab === 'ticker' && currentSet.tickerAssetData?.[name] ? currentSet.tickerAssetData[name].volatility : getDisplayedVolatility(name),
-    label: name,
-    color: slotColors[index % slotColors.length]
-  }));
+  const highlightedAssets = highlightedAssetNames
+    .map((name, index) => {
+      if (activeTab === 'ticker') {
+        const tickerMetrics = currentSet.tickerAssetData?.[name] ?? tickerDataset.assetData?.[name];
+        if (!tickerMetrics) return null;
+        return {
+          name,
+          return: tickerMetrics.compoundReturn2024,
+          risk: tickerMetrics.volatility,
+          label: name,
+          color: slotColors[index % slotColors.length]
+        };
+      }
+
+      return {
+        name,
+        return: getDisplayedReturn(name),
+        risk: getDisplayedVolatility(name),
+        label: name,
+        color: slotColors[index % slotColors.length]
+      };
+    })
+    .filter(Boolean);
 
   const basePoints = [
     ...currentSet.portfolios,
