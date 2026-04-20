@@ -114,8 +114,14 @@ const compactWeightLabel = (selectedAssets, weightPct) => {
   return `${top} · +${entries.length - 4} more`;
 };
 
+const getReturnField = (asset) => {
+  if (typeof asset.expectedReturn === 'number') return asset.expectedReturn;
+  if (typeof asset.annualizedReturn === 'number') return asset.annualizedReturn;
+  return asset.compoundReturn2024;
+};
+
 const evaluatePortfolio = (weights, selectedAssets, assetData, correlationMatrix, riskFreeRate) => {
-  const returns = selectedAssets.map((assetName) => assetData[assetName].compoundReturn2024 / 100);
+  const returns = selectedAssets.map((assetName) => getReturnField(assetData[assetName]) / 100);
   const vols = selectedAssets.map((assetName) => assetData[assetName].volatility / 100);
 
   const portfolioReturn = weights.reduce((sum, weight, index) => sum + weight * returns[index], 0);

@@ -1,43 +1,132 @@
 # Efficient Frontier Calculator
 
-A simple React-based application for visualizing a three-asset portfolio opportunity set using Modern Portfolio Theory concepts.
+A React-based application for visualizing portfolio optimization using Modern Portfolio Theory.
 
-## Features
-- Select 3 asset classes
-- Visualize risk vs. return
-- Compute portfolio combinations across a 3-asset weight grid
-- Interactive chart using Recharts
+## New: Ticker Mode (Backend Required)
 
-## Tech Stack
-- React
-- Vite
-- Recharts
+This project includes a **secure backend proxy** for market data.
 
-## Getting Started
+### Why?
+- API keys are **never exposed in the browser**
+- Ticker data is cached locally to reduce API usage
+- The frontend only talks to `/api/...`, not directly to Alpha Vantage
+
+---
+
+## Setup
+
+### 1. Install dependencies
 
 ```bash
 npm install
+```
+
+### 2. Add your API key
+
+Create either:
+
+```bash
+.env.local
+```
+
+or:
+
+```bash
+.env
+```
+
+Add:
+
+```bash
+ALPHA_VANTAGE_API_KEY=your_key_here
+```
+
+Optional backend tuning:
+
+```bash
+TICKER_CACHE_TTL_DAYS=1
+ALPHA_VANTAGE_MIN_INTERVAL_MS=13000
+```
+
+### 3. Run backend
+
+```bash
+npm run server
+```
+
+### 4. Run frontend
+
+```bash
 npm run dev
 ```
 
+### 5. Or run both together
+
+```bash
+npm run dev:all
+```
+
+---
+
+## API Endpoints
+
+### Health check
+```text
+GET /api/health
+```
+
+### Fetch ticker data
+```text
+GET /api/ticker/:symbol
+```
+
+### Force refresh a ticker
+```text
+POST /api/ticker/:symbol/refresh
+```
+
+Responses include:
+- data source (`cache` or `api`)
+- last updated timestamp
+- next refresh timestamp
+- age in days
+- cache TTL in days
+
+---
+
+## Caching Strategy (Ticker Update)
+
+- Data cached locally in `.cache/`
+- Default cache TTL: **1 day**
+- Re-fetch only when stale, or when a manual refresh is requested
+- Backend serializes Alpha Vantage requests to better respect the free-tier limit
+
+---
+
+## Important Ticker Lab Caveats
+
+Ticker Lab uses **historical realized** market data, not forward-looking J.P. Morgan LTCMA assumptions.
+
+Current implementation details:
+- Uses the free-tier `TIME_SERIES_DAILY` endpoint
+- Works from a compact history window (~100 trading days)
+- Computes realized annualized return from **mean daily log returns × 252**
+- Computes annualized volatility from the same realized history
+- Uses **raw close prices** on the free tier, which are **not split/dividend adjusted**
+
+The UI will warn if it detects unusually large raw price moves that may indicate a stock split or other distortion.
+
+---
+
+## Existing Features
+- Efficient frontier visualization
+- Build-your-own LTCMA portfolio mode
+- Advisor-driven LTCMA portfolio mode
+- Ticker Lab for backend-fetched market data
+
+---
+
 ## Data Source
-The hardcoded asset assumptions in this prototype were derived from:
+J.P. Morgan Asset Management, 2025 Long-Term Capital Market Assumptions
 
-J.P. Morgan Asset Management, 2025 Long-Term Capital Market Assumptions  
-Section: 2025 Estimates and correlations | U.S. dollar assumptions  
-Source date: as of September 30, 2024
-
-See docs/SOURCE_DATA.md for full provenance and implementation notes.
-
-## Important Caveats
-- The current app is a prototype and does not yet include the full correlation matrix from the J.P. Morgan report.
-- Only a subset of asset classes and pairwise correlations are currently hardcoded.
-- For asset pairs not explicitly defined in the app, the code falls back to a placeholder correlation assumption.
-- The chart currently displays a cloud of feasible portfolio combinations for three selected assets; it does not yet isolate the mathematically efficient frontier.
-
-## Future Improvements
-- Add the full correlation matrix from the source report
-- Move source assumptions into structured data files
-- Implement true frontier extraction / optimization
-- Add Sharpe ratio, minimum-variance, and tangent portfolio views
-- Add report citation details and reproducible data-import workflow
+Ticker Lab additionally uses backend-fetched Alpha Vantage market data.
