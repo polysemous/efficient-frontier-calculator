@@ -19,10 +19,13 @@ import {
   chooseAdvisorSampleCount,
   chooseSampleCount,
   extractEfficientFrontier,
-  findPortfolioSolutions,
+  findAlternatives,
+  findPrimaryPortfolio,
   generatePortfolioSet,
   generateSparsePortfolioSet
 } from './lib/portfolioMath';
+
+const SAMPLING_TOLERANCE = 0.25; // percentage points on return & risk axes
 
 const allAssetNames = Object.keys(assetData).sort((a, b) => a.localeCompare(b));
 const isReferenceAsset = (assetName) => assetTaxonomy[assetName]?.class === 'reference';
@@ -434,7 +437,8 @@ const EfficientFrontierApp = () => {
     return { modeLabel: 'Build My Own', activeAssets, sampleCount, portfolios, ...summarizePortfolios(portfolios) };
   }, [activeTab, assetCount, riskFreeRateValue, selected]);
 
-  const buildFinderResults = useMemo(() => findPortfolioSolutions({ portfolios: buildOptimizedSet.portfolios, mode: buildFinderMode, targetValue: buildFinderTarget, limit: 10 }), [buildFinderMode, buildFinderTarget, buildOptimizedSet.portfolios]);
+  const buildFinderResults = useMemo(() => findPrimaryPortfolio({ portfolios: buildOptimizedSet.portfolios, mode: buildFinderMode, targetValue: buildFinderTarget }), [buildFinderMode, buildFinderTarget, buildOptimizedSet.portfolios]);
+  const buildAlternatives = useMemo(() => findAlternatives({ primary: buildFinderResults.primary, portfolios: buildOptimizedSet.portfolios, tolerance: SAMPLING_TOLERANCE }), [buildFinderResults.primary, buildOptimizedSet.portfolios]);
 
   const advisorUniverse = useMemo(() => investableAssetNames.filter((assetName) => {
     if (includeOnlyPublicMarkets && isPrivateAlternativeAsset(assetName)) return false;
@@ -467,7 +471,8 @@ const EfficientFrontierApp = () => {
     return { modeLabel: 'Choose for Me', candidateUniverse: advisorUniverse, sampleCount: rawAdvisorPortfolios.length, portfolios, ...summarizePortfolios(portfolios) };
   }, [activeTab, advisorUniverse, rawAdvisorPortfolios, requireBond]);
 
-  const advisorFinderResults = useMemo(() => findPortfolioSolutions({ portfolios: advisorOptimizedSet.portfolios, mode: advisorMode, targetValue: advisorTarget, limit: 10 }), [advisorMode, advisorOptimizedSet.portfolios, advisorTarget]);
+  const advisorFinderResults = useMemo(() => findPrimaryPortfolio({ portfolios: advisorOptimizedSet.portfolios, mode: advisorMode, targetValue: advisorTarget }), [advisorMode, advisorOptimizedSet.portfolios, advisorTarget]);
+  const advisorAlternatives = useMemo(() => findAlternatives({ primary: advisorFinderResults.primary, portfolios: advisorOptimizedSet.portfolios, tolerance: SAMPLING_TOLERANCE }), [advisorFinderResults.primary, advisorOptimizedSet.portfolios]);
 
   const tickerDataset = useMemo(() => tickerFetchState.status === 'success' ? buildTickerDataset(tickerFetchState.results) : { error: null }, [tickerFetchState]);
 
@@ -481,13 +486,16 @@ const EfficientFrontierApp = () => {
     return { modeLabel: 'Ticker Lab', activeAssets: tickerDataset.symbols, sampleCount, portfolios, observationCount: tickerDataset.observationCount, windowStart: tickerDataset.windowStart, windowEnd: tickerDataset.windowEnd, methodLabel: tickerDataset.methodLabel, warningsBySymbol: tickerDataset.warningsBySymbol, tickerAssetData: tickerDataset.assetData, ...summarizePortfolios(portfolios) };
   }, [activeTab, loadedTickerSymbols, riskFreeRateValue, tickerDataset, tickerFetchState.status]);
 
-  const tickerFinderResults = useMemo(() => findPortfolioSolutions({ portfolios: tickerOptimizedSet.portfolios, mode: tickerMode, targetValue: tickerTarget, limit: 10 }), [tickerMode, tickerOptimizedSet.portfolios, tickerTarget]);
+  const tickerFinderResults = useMemo(() => findPrimaryPortfolio({ portfolios: tickerOptimizedSet.portfolios, mode: tickerMode, targetValue: tickerTarget }), [tickerMode, tickerOptimizedSet.portfolios, tickerTarget]);
+  const tickerAlternatives = useMemo(() => findAlternatives({ primary: tickerFinderResults.primary, portfolios: tickerOptimizedSet.portfolios, tolerance: SAMPLING_TOLERANCE }), [tickerFinderResults.primary, tickerOptimizedSet.portfolios]);
 
   const currentSet = activeTab === 'build' ? buildOptimizedSet : activeTab === 'advisor' ? advisorOptimizedSet : tickerOptimizedSet;
   const currentFinderResults = activeTab === 'build' ? buildFinderResults : activeTab === 'advisor' ? advisorFinderResults : tickerFinderResults;
+  const currentAlternatives = activeTab === 'build' ? buildAlternatives : activeTab === 'advisor' ? advisorAlternatives : tickerAlternatives;
   const currentFinderMode = activeTab === 'build' ? buildFinderMode : activeTab === 'advisor' ? advisorMode : tickerMode;
-  const recommendation = currentFinderResults.feasible[0] ?? currentFinderResults.fallback[0] ?? null;
-  const visibleSolutions = currentFinderResults.feasible.length > 0 ? currentFinderResults.feasible : currentFinderResults.fallback;
+  const recommendation = currentFinderResults.primary;
+  const primaryStatus = currentFinderResults.status;
+  const isFeasible = primaryStatus === 'on-frontier';
   const ms = currentSet.maxSharpe[0];
   const frontierReturns = currentSet.frontier.map((point) => point.return);
   const frontierLow = frontierReturns.length ? Math.min(...frontierReturns) : 0;
@@ -509,7 +517,35 @@ const EfficientFrontierApp = () => {
   const allYs = [...basePoints.map((point) => point.return), ...capitalMarketLine.map((point) => point.return)];
   const yMin = Math.floor((allYs.length ? Math.min(...allYs) : 0) - 0.5);
   const yMax = Math.ceil((allYs.length ? Math.max(...allYs) : 0) + 0.5);
-  const recommendationPoint = recommendation ? [{ ...recommendation, label: currentFinderResults.feasible.length ? (activeTab === 'build' ? 'Finder result' : activeTab === 'advisor' ? 'Advisor recommendation' : 'Ticker recommendation') : 'Nearest portfolio' }] : [];
+  const recommendationPoint = recommendation ? [{ ...recommendation, label: isFeasible ? (activeTab === 'build' ? 'Finder result' : activeTab === 'advisor' ? 'Advisor recommendation' : 'Ticker recommendation') : 'Closest achievable' }] : [];
+
+  const feasibilityBadge = (() => {
+    if (primaryStatus === 'no-target') {
+      return { kind: 'neutral', short: 'awaiting target', detail: 'Enter a target to evaluate the frontier.' };
+    }
+    if (primaryStatus === 'empty') {
+      return { kind: 'warning', short: 'no portfolios', detail: 'The current constraints produced no candidate portfolios.' };
+    }
+    if (primaryStatus === 'above-max-return') {
+      return {
+        kind: 'warning',
+        short: 'above frontier max',
+        detail: `Target ${fmtPct(currentFinderResults.target, 2)} exceeds the highest achievable return on this asset set (${fmtPct(currentFinderResults.frontierMax ?? 0, 2)}). Showing the maximum-return portfolio.`
+      };
+    }
+    if (primaryStatus === 'below-min-variance') {
+      return {
+        kind: 'warning',
+        short: 'below min-variance floor',
+        detail: `Risk budget ${fmtPct(currentFinderResults.target, 2)} is below the minimum-variance floor (${fmtPct(currentFinderResults.frontierMinRisk ?? 0, 2)}). Showing the minimum-variance portfolio.`
+      };
+    }
+    return {
+      kind: 'success',
+      short: 'on the estimated frontier',
+      detail: `Minimum-${currentFinderMode === 'requiredReturn' ? 'risk' : 'variance'} point meeting your target (±${SAMPLING_TOLERANCE}% sampling tolerance).`
+    };
+  })();
   const displayCloud = useMemo(() => currentSet.portfolios.filter((_, index) => index % (currentSet.portfolios.length > 7000 ? 3 : currentSet.portfolios.length > 4500 ? 2 : 1) === 0), [currentSet.portfolios]);
   const donutSegments = (point) => point.selectedAssets.map((name, index) => ({ name, value: point.weightPct[index], color: slotColors[index % slotColors.length] }));
 
@@ -576,14 +612,14 @@ const EfficientFrontierApp = () => {
               </div>
             </div>
             <div className="finder-grid">
-              <div className="panel finder-panel"><div className="panel-header"><h2 className="panel-title">Portfolio finder</h2><div className={`status-pill ${buildFinderResults.feasible.length ? 'success' : 'warning'}`}>{buildFinderResults.feasible.length ? 'feasible solutions found' : 'showing nearest matches'}</div></div><div className="mode-toggle"><button className={`mode-button ${buildFinderMode === 'requiredReturn' ? 'active' : ''}`} onClick={() => setBuildFinderMode('requiredReturn')}>Required return</button><button className={`mode-button ${buildFinderMode === 'maxRisk' ? 'active' : ''}`} onClick={() => setBuildFinderMode('maxRisk')}>Maximum risk</button></div><div className="finder-input-row"><div className="rf-card compact full-width"><div className="asset-label">{buildFinderMode === 'requiredReturn' ? 'Target return' : 'Risk ceiling'}</div><div className="rf-input-row"><input className="rf-input" type="number" step="0.10" value={buildFinderTarget} onChange={(event) => setBuildFinderTarget(event.target.value)} /><span className="rf-suffix">%</span></div><div className="rf-hint">Optimize weights within your selected asset set.</div></div></div></div>
-              <div className="panel recommendation-panel"><div className="panel-header"><h2 className="panel-title">Suggested portfolio</h2><div className="header-meta" style={{ fontSize: 10 }}>{buildFinderResults.feasible.length ? 'best exact fit' : 'closest available fit'}</div></div>{recommendation ? <><div className="donut-wrap"><Donut segments={donutSegments(recommendation)} centerTop={buildFinderMode === 'requiredReturn' ? fmtPct(recommendation.risk, 1) : fmtPct(recommendation.return, 1)} centerBottom={buildFinderMode === 'requiredReturn' ? 'RISK' : 'RETURN'} /><div className="donut-legend">{recommendation.selectedAssets.map((name, index) => <div className="donut-legend-row" key={name}><span className="legend-swatch" style={{ background: slotColors[index % slotColors.length] }} /><span className="name">{name}</span><span className="pct">{recommendation.weightPct[index]}%</span></div>)}</div></div><div className="insight-metrics"><div className="stat"><span className="stat-label">Return</span><span className="stat-value">{fmtPct(recommendation.return)}</span></div><div className="stat"><span className="stat-label">Risk</span><span className="stat-value">{fmtPct(recommendation.risk)}</span></div><div className="stat"><span className="stat-label">Sharpe</span><span className="stat-value">{Number.isFinite(recommendation.sharpe) ? fmtNum(recommendation.sharpe) : '—'}</span></div></div></> : <div className="empty-state">Enter a target to evaluate candidate portfolios.</div>}</div>
+              <div className="panel finder-panel"><div className="panel-header"><h2 className="panel-title">Portfolio finder</h2><div className={`feasibility-badge feasibility-${feasibilityBadge.kind}`}>{feasibilityBadge.short}</div></div><div className="mode-toggle"><button className={`mode-button ${buildFinderMode === 'requiredReturn' ? 'active' : ''}`} onClick={() => setBuildFinderMode('requiredReturn')}>Required return</button><button className={`mode-button ${buildFinderMode === 'maxRisk' ? 'active' : ''}`} onClick={() => setBuildFinderMode('maxRisk')}>Maximum risk</button></div><div className="finder-input-row"><div className="rf-card compact full-width"><div className="asset-label">{buildFinderMode === 'requiredReturn' ? 'Target return' : 'Risk ceiling'}</div><div className="rf-input-row"><input className="rf-input" type="number" step="0.10" value={buildFinderTarget} onChange={(event) => setBuildFinderTarget(event.target.value)} /><span className="rf-suffix">%</span></div><div className="rf-hint">Optimize weights within your selected asset set.</div></div></div></div>
+              <div className="panel recommendation-panel"><div className="panel-header"><h2 className="panel-title">Suggested portfolio</h2><div className={`feasibility-badge feasibility-${feasibilityBadge.kind}`}>{feasibilityBadge.short}</div></div>{recommendation ? <><div className="feasibility-detail">{feasibilityBadge.detail}</div><div className="donut-wrap"><Donut segments={donutSegments(recommendation)} centerTop={buildFinderMode === 'requiredReturn' ? fmtPct(recommendation.risk, 1) : fmtPct(recommendation.return, 1)} centerBottom={buildFinderMode === 'requiredReturn' ? 'RISK' : 'RETURN'} /><div className="donut-legend">{recommendation.selectedAssets.map((name, index) => <div className="donut-legend-row" key={name}><span className="legend-swatch" style={{ background: slotColors[index % slotColors.length] }} /><span className="name">{name}</span><span className="pct">{recommendation.weightPct[index]}%</span></div>)}</div></div><div className="insight-metrics"><div className="stat"><span className="stat-label">Return</span><span className="stat-value">{fmtPct(recommendation.return)}</span></div><div className="stat"><span className="stat-label">Risk</span><span className="stat-value">{fmtPct(recommendation.risk)}</span></div><div className="stat"><span className="stat-label">Sharpe</span><span className="stat-value">{Number.isFinite(recommendation.sharpe) ? fmtNum(recommendation.sharpe) : '—'}</span></div></div></> : <div className="empty-state">Enter a target to evaluate candidate portfolios.</div>}</div>
             </div>
           </>
         ) : activeTab === 'advisor' ? (
           <div className="finder-grid">
             <div className="panel finder-panel">
-              <div className="panel-header"><h2 className="panel-title">Advisor constraints</h2><div className={`status-pill ${advisorFinderResults.feasible.length ? 'success' : 'warning'}`}>{advisorFinderResults.feasible.length ? 'recommendations found' : 'showing nearest matches'}</div></div>
+              <div className="panel-header"><h2 className="panel-title">Advisor constraints</h2><div className={`feasibility-badge feasibility-${feasibilityBadge.kind}`}>{feasibilityBadge.short}</div></div>
               <div className="mode-toggle"><button className={`mode-button ${advisorMode === 'requiredReturn' ? 'active' : ''}`} onClick={() => setAdvisorMode('requiredReturn')}>Required return</button><button className={`mode-button ${advisorMode === 'maxRisk' ? 'active' : ''}`} onClick={() => setAdvisorMode('maxRisk')}>Maximum risk</button></div>
               <div className="finder-input-row advisor-grid">
                 <div className="rf-card compact"><div className="asset-label">{advisorMode === 'requiredReturn' ? 'Target return' : 'Risk ceiling'}</div><div className="rf-input-row"><input className="rf-input" type="number" step="0.10" value={advisorTarget} onChange={(event) => setAdvisorTarget(event.target.value)} /><span className="rf-suffix">%</span></div><div className="rf-hint">Let the app choose assets and weights.</div></div>
@@ -607,7 +643,7 @@ const EfficientFrontierApp = () => {
               </div>
               <div className="finder-summary"><div className="summary-chip">Universe {advisorUniverse.length} assets</div><div className="summary-chip">Bond assets {advisorBondUniverse.length}</div><div className="summary-chip">{advisorFilterSummary.join(' · ')}</div></div>
             </div>
-            <div className="panel recommendation-panel"><div className="panel-header"><h2 className="panel-title">Advisor recommendation</h2><div className="header-meta" style={{ fontSize: 10 }}>{advisorFinderResults.feasible.length ? 'best fit from broad universe' : 'closest available fit'}</div></div>{recommendation ? <><div className="donut-wrap"><Donut segments={donutSegments(recommendation)} centerTop={advisorMode === 'requiredReturn' ? fmtPct(recommendation.risk, 1) : fmtPct(recommendation.return, 1)} centerBottom={advisorMode === 'requiredReturn' ? 'RISK' : 'RETURN'} /><div className="donut-legend">{recommendation.selectedAssets.map((name, index) => <div className="donut-legend-row" key={name}><span className="legend-swatch" style={{ background: slotColors[index % slotColors.length] }} /><span className="name">{name}</span><span className="pct">{recommendation.weightPct[index]}%</span></div>)}</div></div><div className="insight-metrics"><div className="stat"><span className="stat-label">Return</span><span className="stat-value">{fmtPct(recommendation.return)}</span></div><div className="stat"><span className="stat-label">Risk</span><span className="stat-value">{fmtPct(recommendation.risk)}</span></div><div className="stat"><span className="stat-label">Sharpe</span><span className="stat-value">{Number.isFinite(recommendation.sharpe) ? fmtNum(recommendation.sharpe) : '—'}</span></div><div className="stat"><span className="stat-label">Avg corr</span><span className="stat-value">{Number.isFinite(recommendation.avgCorrelation) ? fmtNum(recommendation.avgCorrelation, 2) : '—'}</span></div><div className="stat"><span className="stat-label">Div ratio</span><span className="stat-value">{Number.isFinite(recommendation.diversificationRatio) ? fmtNum(recommendation.diversificationRatio, 2) : '—'}</span></div></div></> : <div className="empty-state">{advisorEmptyMessage}</div>}</div>
+            <div className="panel recommendation-panel"><div className="panel-header"><h2 className="panel-title">Advisor recommendation</h2><div className={`feasibility-badge feasibility-${feasibilityBadge.kind}`}>{feasibilityBadge.short}</div></div>{recommendation ? <><div className="feasibility-detail">{feasibilityBadge.detail}</div><div className="donut-wrap"><Donut segments={donutSegments(recommendation)} centerTop={advisorMode === 'requiredReturn' ? fmtPct(recommendation.risk, 1) : fmtPct(recommendation.return, 1)} centerBottom={advisorMode === 'requiredReturn' ? 'RISK' : 'RETURN'} /><div className="donut-legend">{recommendation.selectedAssets.map((name, index) => <div className="donut-legend-row" key={name}><span className="legend-swatch" style={{ background: slotColors[index % slotColors.length] }} /><span className="name">{name}</span><span className="pct">{recommendation.weightPct[index]}%</span></div>)}</div></div><div className="insight-metrics"><div className="stat"><span className="stat-label">Return</span><span className="stat-value">{fmtPct(recommendation.return)}</span></div><div className="stat"><span className="stat-label">Risk</span><span className="stat-value">{fmtPct(recommendation.risk)}</span></div><div className="stat"><span className="stat-label">Sharpe</span><span className="stat-value">{Number.isFinite(recommendation.sharpe) ? fmtNum(recommendation.sharpe) : '—'}</span></div><div className="stat"><span className="stat-label">Avg corr</span><span className="stat-value">{Number.isFinite(recommendation.avgCorrelation) ? fmtNum(recommendation.avgCorrelation, 2) : '—'}</span></div><div className="stat"><span className="stat-label">Div ratio</span><span className="stat-value">{Number.isFinite(recommendation.diversificationRatio) ? fmtNum(recommendation.diversificationRatio, 2) : '—'}</span></div></div></> : <div className="empty-state">{advisorEmptyMessage}</div>}</div>
           </div>
         ) : (
           <>
@@ -636,8 +672,8 @@ const EfficientFrontierApp = () => {
               </div>
             </div>
             <div className="finder-grid">
-              <div className="panel finder-panel"><div className="panel-header"><h2 className="panel-title">Ticker optimizer</h2><div className={`status-pill ${tickerFinderResults.feasible.length ? 'success' : 'warning'}`}>{tickerFinderResults.feasible.length ? 'feasible solutions found' : 'showing nearest matches'}</div></div><div className="mode-toggle"><button className={`mode-button ${tickerMode === 'requiredReturn' ? 'active' : ''}`} onClick={() => setTickerMode('requiredReturn')}>Required return</button><button className={`mode-button ${tickerMode === 'maxRisk' ? 'active' : ''}`} onClick={() => setTickerMode('maxRisk')}>Maximum risk</button></div><div className="finder-input-row"><div className="rf-card compact full-width"><div className="asset-label">{tickerMode === 'requiredReturn' ? 'Target return' : 'Risk ceiling'}</div><div className="rf-input-row"><input className="rf-input" type="number" step="0.10" value={tickerTarget} onChange={(event) => setTickerTarget(event.target.value)} /><span className="rf-suffix">%</span></div><div className="rf-hint">Historical realized inputs only. These are not forward-looking J.P. Morgan capital market assumptions.</div></div></div></div>
-              <div className="panel recommendation-panel"><div className="panel-header"><h2 className="panel-title">Ticker recommendation</h2><div className="header-meta" style={{ fontSize: 10 }}>{tickerFinderResults.feasible.length ? 'best fit from loaded tickers' : 'closest available fit'}</div></div>{recommendation ? <><div className="donut-wrap"><Donut segments={donutSegments(recommendation)} centerTop={tickerMode === 'requiredReturn' ? fmtPct(recommendation.risk, 1) : fmtPct(recommendation.return, 1)} centerBottom={tickerMode === 'requiredReturn' ? 'RISK' : 'RETURN'} /><div className="donut-legend">{recommendation.selectedAssets.map((name, index) => <div className="donut-legend-row" key={name}><span className="legend-swatch" style={{ background: slotColors[index % slotColors.length] }} /><span className="name">{name}</span><span className="pct">{recommendation.weightPct[index]}%</span></div>)}</div></div><div className="insight-metrics"><div className="stat"><span className="stat-label">Return</span><span className="stat-value">{fmtPct(recommendation.return)}</span></div><div className="stat"><span className="stat-label">Risk</span><span className="stat-value">{fmtPct(recommendation.risk)}</span></div><div className="stat"><span className="stat-label">Sharpe</span><span className="stat-value">{Number.isFinite(recommendation.sharpe) ? fmtNum(recommendation.sharpe) : '—'}</span></div></div></> : <div className="empty-state">{tickerStatusMessage || 'Load at least two valid tickers to compute a custom frontier.'}</div>}</div>
+              <div className="panel finder-panel"><div className="panel-header"><h2 className="panel-title">Ticker optimizer</h2><div className={`feasibility-badge feasibility-${feasibilityBadge.kind}`}>{feasibilityBadge.short}</div></div><div className="mode-toggle"><button className={`mode-button ${tickerMode === 'requiredReturn' ? 'active' : ''}`} onClick={() => setTickerMode('requiredReturn')}>Required return</button><button className={`mode-button ${tickerMode === 'maxRisk' ? 'active' : ''}`} onClick={() => setTickerMode('maxRisk')}>Maximum risk</button></div><div className="finder-input-row"><div className="rf-card compact full-width"><div className="asset-label">{tickerMode === 'requiredReturn' ? 'Target return' : 'Risk ceiling'}</div><div className="rf-input-row"><input className="rf-input" type="number" step="0.10" value={tickerTarget} onChange={(event) => setTickerTarget(event.target.value)} /><span className="rf-suffix">%</span></div><div className="rf-hint">Historical realized inputs only. These are not forward-looking J.P. Morgan capital market assumptions.</div></div></div></div>
+              <div className="panel recommendation-panel"><div className="panel-header"><h2 className="panel-title">Ticker recommendation</h2><div className={`feasibility-badge feasibility-${feasibilityBadge.kind}`}>{feasibilityBadge.short}</div></div>{recommendation ? <><div className="feasibility-detail">{feasibilityBadge.detail}</div><div className="donut-wrap"><Donut segments={donutSegments(recommendation)} centerTop={tickerMode === 'requiredReturn' ? fmtPct(recommendation.risk, 1) : fmtPct(recommendation.return, 1)} centerBottom={tickerMode === 'requiredReturn' ? 'RISK' : 'RETURN'} /><div className="donut-legend">{recommendation.selectedAssets.map((name, index) => <div className="donut-legend-row" key={name}><span className="legend-swatch" style={{ background: slotColors[index % slotColors.length] }} /><span className="name">{name}</span><span className="pct">{recommendation.weightPct[index]}%</span></div>)}</div></div><div className="insight-metrics"><div className="stat"><span className="stat-label">Return</span><span className="stat-value">{fmtPct(recommendation.return)}</span></div><div className="stat"><span className="stat-label">Risk</span><span className="stat-value">{fmtPct(recommendation.risk)}</span></div><div className="stat"><span className="stat-label">Sharpe</span><span className="stat-value">{Number.isFinite(recommendation.sharpe) ? fmtNum(recommendation.sharpe) : '—'}</span></div></div></> : <div className="empty-state">{tickerStatusMessage || 'Load at least two valid tickers to compute a custom frontier.'}</div>}</div>
             </div>
           </>
         )}
@@ -666,16 +702,21 @@ const EfficientFrontierApp = () => {
           </ResponsiveContainer>
         </div>
 
-        <div className="panel">
-          <div className="panel-header"><h2 className="panel-title">{activeTab === 'build' ? 'Top candidate mixes' : activeTab === 'advisor' ? 'Top advisor recommendations' : 'Top ticker portfolios'}</h2><div className="header-meta" style={{ fontSize: 10 }}>{currentFinderMode === 'requiredReturn' ? 'sorted by lowest risk' : 'sorted by highest return'} · top 10</div></div>
-          <div className="table-wrap">
-            {activeTab === 'advisor' ? (
-              <table className="results-table"><thead><tr><th>#</th><th>Return</th><th>Risk</th><th>Sharpe</th><th>Avg corr</th><th>Assets / weights</th></tr></thead><tbody>{visibleSolutions.length > 0 ? visibleSolutions.map((point, index) => <tr key={`${point.return}-${point.risk}-${index}`} className={index === 0 ? 'active-row' : ''}><td>{index + 1}</td><td>{fmtPct(point.return)}</td><td>{fmtPct(point.risk)}</td><td>{Number.isFinite(point.sharpe) ? fmtNum(point.sharpe) : '—'}</td><td>{Number.isFinite(point.avgCorrelation) ? fmtNum(point.avgCorrelation, 2) : '—'}</td><td className="weights-cell" title={point.fullWeightLabel}>{point.weightLabel}</td></tr>) : <tr><td colSpan={6} className="empty-state">{advisorEmptyMessage}</td></tr>}</tbody></table>
-            ) : (
-              <table className="results-table"><thead><tr><th>#</th><th>Return</th><th>Risk</th><th>Sharpe</th><th>Assets / weights</th></tr></thead><tbody>{visibleSolutions.length > 0 ? visibleSolutions.map((point, index) => <tr key={`${point.return}-${point.risk}-${index}`} className={index === 0 ? 'active-row' : ''}><td>{index + 1}</td><td>{fmtPct(point.return)}</td><td>{fmtPct(point.risk)}</td><td>{Number.isFinite(point.sharpe) ? fmtNum(point.sharpe) : '—'}</td><td className="weights-cell" title={point.fullWeightLabel}>{point.weightLabel}</td></tr>) : <tr><td colSpan={5} className="empty-state">{activeTab === 'ticker' ? tickerStatusMessage || 'Load at least two valid tickers to compute portfolios.' : 'No portfolios available for the current settings.'}</td></tr>}</tbody></table>
-            )}
-          </div>
-        </div>
+        {isFeasible && recommendation && currentAlternatives.length > 0 ? (
+          <details className="panel alternatives-panel">
+            <summary>
+              <span className="alternatives-summary-title">Show nearby alternatives</span>
+              <span className="alternatives-summary-meta">{currentAlternatives.length} within ±{SAMPLING_TOLERANCE}% of your target on both axes · ranked by Sharpe</span>
+            </summary>
+            <div className="table-wrap">
+              {activeTab === 'advisor' ? (
+                <table className="results-table"><thead><tr><th>#</th><th>Return</th><th>Risk</th><th>Sharpe</th><th>Avg corr</th><th>Assets / weights</th></tr></thead><tbody>{currentAlternatives.map((point, index) => <tr key={`${point.return}-${point.risk}-${index}`}><td>{index + 1}</td><td>{fmtPct(point.return)}</td><td>{fmtPct(point.risk)}</td><td>{Number.isFinite(point.sharpe) ? fmtNum(point.sharpe) : '—'}</td><td>{Number.isFinite(point.avgCorrelation) ? fmtNum(point.avgCorrelation, 2) : '—'}</td><td className="weights-cell" title={point.fullWeightLabel}>{point.weightLabel}</td></tr>)}</tbody></table>
+              ) : (
+                <table className="results-table"><thead><tr><th>#</th><th>Return</th><th>Risk</th><th>Sharpe</th><th>Assets / weights</th></tr></thead><tbody>{currentAlternatives.map((point, index) => <tr key={`${point.return}-${point.risk}-${index}`}><td>{index + 1}</td><td>{fmtPct(point.return)}</td><td>{fmtPct(point.risk)}</td><td>{Number.isFinite(point.sharpe) ? fmtNum(point.sharpe) : '—'}</td><td className="weights-cell" title={point.fullWeightLabel}>{point.weightLabel}</td></tr>)}</tbody></table>
+              )}
+            </div>
+          </details>
+        ) : null}
 
         <div className="footer">Source · J.P. Morgan Asset Management · 2025 Long-Term Capital Market Assumptions · plus backend-fetched ticker history for Ticker Lab · sampled optimization for client-side interactivity</div>
       </div>
