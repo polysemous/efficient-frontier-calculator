@@ -261,10 +261,23 @@ export const generateSparsePortfolioSet = ({
 }) => {
   if (candidateAssets.length === 0) return [];
 
-  const minSize = Math.max(1, Math.min(minAssetsInPortfolio, candidateAssets.length, maxAssetsInPortfolio));
-  const maxSize = Math.max(minSize, Math.min(maxAssetsInPortfolio, candidateAssets.length));
+  const normalizedMaxAssets = Number.isFinite(maxAssetsInPortfolio)
+    ? Math.max(1, Math.floor(maxAssetsInPortfolio))
+    : candidateAssets.length;
+  const normalizedMinAssets = Number.isFinite(minAssetsInPortfolio)
+    ? Math.max(1, Math.floor(minAssetsInPortfolio))
+    : 1;
+  const normalizedMaxWeight = Number.isFinite(maxWeightPerAsset)
+    ? Math.max(0.1, Math.min(maxWeightPerAsset, 1))
+    : 1;
+  const normalizedMaxAverageCorrelation = Number.isFinite(maxAverageCorrelation)
+    ? Math.max(-1, Math.min(maxAverageCorrelation, 1))
+    : 1;
+
+  const minSize = Math.max(1, Math.min(normalizedMinAssets, candidateAssets.length, normalizedMaxAssets));
+  const maxSize = Math.max(minSize, Math.min(normalizedMaxAssets, candidateAssets.length));
   const random = createSeededRandom(
-    `${candidateAssets.join('|')}|${riskFreeRate}|${sampleCount}|${minSize}|${maxSize}|${requiredAssetsPool.join('|')}|${maxWeightPerAsset}|${maxAverageCorrelation}|sparse`
+    `${candidateAssets.join('|')}|${riskFreeRate}|${sampleCount}|${minSize}|${maxSize}|${requiredAssetsPool.join('|')}|${normalizedMaxWeight}|${normalizedMaxAverageCorrelation}|sparse`
   );
   const portfolios = [];
   const seen = new Set();
@@ -275,8 +288,8 @@ export const generateSparsePortfolioSet = ({
       weights,
       correlationMatrix,
       minAssetsInPortfolio: minSize,
-      maxWeightPerAsset,
-      maxAverageCorrelation
+      maxWeightPerAsset: normalizedMaxWeight,
+      maxAverageCorrelation: normalizedMaxAverageCorrelation
     })) {
       return;
     }
