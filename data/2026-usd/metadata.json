@@ -1,0 +1,14 @@
+{
+  "datasetId": "jpm-ltcma-2026-usd",
+  "datasetName": "J.P. Morgan Asset Management 2026 Long-Term Capital Market Assumptions",
+  "section": "2026 estimates and correlations | U.S. dollar assumptions",
+  "assumptionVintage": "2025-09-30",
+  "edition": "30th annual edition",
+  "currency": "USD",
+  "status": "full",
+  "notes": [
+    "This repository stores structured assumptions derived from the source report without redistributing the report PDFs.",
+    "Returns and volatilities are sourced from the report's U.S. dollar assumption matrix.",
+    "Correlation coverage includes the full U.S. dollar triangular matrix reconstructed from the source report PDF provided by the user."
+  ]
+}

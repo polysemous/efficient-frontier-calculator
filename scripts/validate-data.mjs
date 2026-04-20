@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 
-const datasetDir = path.join('data', '2025-usd');
+const datasetName = process.argv[2] ?? '2026-usd';
+const datasetDir = path.join('data', datasetName);
 const metadataPath = path.join(datasetDir, 'metadata.json');
 const assetsPath = path.join(datasetDir, 'assets.json');
 const assetOrderPath = path.join(datasetDir, 'asset-order.json');

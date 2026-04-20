@@ -117,6 +117,8 @@ const compactWeightLabel = (selectedAssets, weightPct) => {
 const getReturnField = (asset) => {
   if (typeof asset.expectedReturn === 'number') return asset.expectedReturn;
   if (typeof asset.annualizedReturn === 'number') return asset.annualizedReturn;
+  if (typeof asset.compoundReturn2026 === 'number') return asset.compoundReturn2026;
+  if (typeof asset.compoundReturn2025 === 'number') return asset.compoundReturn2025;
   return asset.compoundReturn2024;
 };
 
