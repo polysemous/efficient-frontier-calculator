@@ -409,3 +409,120 @@ export const findPortfolioSolutions = ({ portfolios, mode, targetValue, limit = 
 
   return { feasible, fallback };
 };
+
+/**
+ * Resolve the single efficient portfolio for a target. MPT gives us one answer
+ * per target, not a ranked list. Returns both the primary pick and a status code
+ * that callers can use to render honest feasibility copy.
+ *
+ * Status values:
+ *   - 'no-target'           : target is empty / not a number. Nothing to show.
+ *   - 'empty'               : portfolio set is empty (e.g. constraints eliminate everything).
+ *   - 'on-frontier'         : a feasible portfolio exists; returning the min-risk / max-return point.
+ *   - 'above-max-return'    : (required-return mode) target exceeds the frontier max. Returning max-return portfolio.
+ *   - 'below-min-variance'  : (max-risk mode) risk budget is below the min-variance floor. Returning min-var portfolio.
+ */
+export const findPrimaryPortfolio = ({ portfolios, mode, targetValue }) => {
+  const normalizedTarget = typeof targetValue === 'string' ? targetValue.trim() : `${targetValue ?? ''}`.trim();
+  if (!normalizedTarget) {
+    return { primary: null, status: 'no-target', target: null, frontierMax: null, frontierMinRisk: null };
+  }
+  const target = Number(normalizedTarget);
+  if (!Number.isFinite(target)) {
+    return { primary: null, status: 'no-target', target: null, frontierMax: null, frontierMinRisk: null };
+  }
+  if (!portfolios || portfolios.length === 0) {
+    return { primary: null, status: 'empty', target, frontierMax: null, frontierMinRisk: null };
+  }
+
+  // Frontier max/min-risk are used for feasibility badges regardless of mode.
+  const maxReturnPoint = [...portfolios].sort((a, b) => b.return - a.return)[0];
+  const minRiskPoint = [...portfolios].sort((a, b) => a.risk - b.risk)[0];
+
+  if (mode === 'requiredReturn') {
+    const feasible = portfolios
+      .filter((point) => point.return >= target)
+      .sort((a, b) => (a.risk === b.risk ? b.return - a.return : a.risk - b.risk));
+
+    if (feasible.length === 0) {
+      return {
+        primary: maxReturnPoint,
+        status: 'above-max-return',
+        target,
+        frontierMax: maxReturnPoint?.return ?? null,
+        frontierMinRisk: minRiskPoint?.risk ?? null
+      };
+    }
+
+    return {
+      primary: feasible[0],
+      status: 'on-frontier',
+      target,
+      frontierMax: maxReturnPoint?.return ?? null,
+      frontierMinRisk: minRiskPoint?.risk ?? null
+    };
+  }
+
+  // Max-risk mode.
+  const feasible = portfolios
+    .filter((point) => point.risk <= target)
+    .sort((a, b) => (a.return === b.return ? a.risk - b.risk : b.return - a.return));
+
+  if (feasible.length === 0) {
+    return {
+      primary: minRiskPoint,
+      status: 'below-min-variance',
+      target,
+      frontierMax: maxReturnPoint?.return ?? null,
+      frontierMinRisk: minRiskPoint?.risk ?? null
+    };
+  }
+
+  return {
+    primary: feasible[0],
+    status: 'on-frontier',
+    target,
+    frontierMax: maxReturnPoint?.return ?? null,
+    frontierMinRisk: minRiskPoint?.risk ?? null
+  };
+};
+
+/**
+ * Portfolios that are within `tolerance` percentage points of the primary on
+ * both the return and risk axes. Useful for implementation flexibility
+ * (rounder weights, avoiding extreme corner solutions) without pretending the
+ * frontier has multiple "correct" answers.
+ *
+ * Excludes the primary itself (by canonical key) and dedupes near-identical
+ * weight mixes so the list shows genuinely distinct alternatives.
+ */
+export const findAlternatives = ({ primary, portfolios, tolerance = 0.25, limit = 5 }) => {
+  if (!primary || !portfolios || portfolios.length === 0) return [];
+  const primaryKey = canonicalPortfolioKey(primary.selectedAssets, primary.weights);
+
+  const seenWeightSignatures = new Set([primary.weightPct.join('|')]);
+  const withinTolerance = portfolios
+    .filter((point) => {
+      if (canonicalPortfolioKey(point.selectedAssets, point.weights) === primaryKey) return false;
+      if (Math.abs(point.return - primary.return) > tolerance) return false;
+      if (Math.abs(point.risk - primary.risk) > tolerance) return false;
+      return true;
+    })
+    // Prefer higher Sharpe, then closer to primary on both axes.
+    .sort((a, b) => {
+      if (b.sharpe !== a.sharpe) return b.sharpe - a.sharpe;
+      const distA = Math.hypot(a.return - primary.return, a.risk - primary.risk);
+      const distB = Math.hypot(b.return - primary.return, b.risk - primary.risk);
+      return distA - distB;
+    });
+
+  const alternatives = [];
+  for (const candidate of withinTolerance) {
+    const sig = candidate.weightPct.join('|');
+    if (seenWeightSignatures.has(sig)) continue;
+    seenWeightSignatures.add(sig);
+    alternatives.push(candidate);
+    if (alternatives.length >= limit) break;
+  }
+  return alternatives;
+};
