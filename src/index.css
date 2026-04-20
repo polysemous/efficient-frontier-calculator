@@ -214,8 +214,27 @@ html, body {
 .status-pill.success { background: rgba(52,211,153,0.12); color: #b7f7dd; border: 1px solid rgba(52,211,153,0.24); }
 .status-pill.warning { background: rgba(244,195,90,0.12); color: #f9e6b2; border: 1px solid rgba(244,195,90,0.24); }
 
-.chart-legend { display: flex; gap: 16px; flex-wrap: wrap; }
+.chart-legend { display: flex; gap: 12px; flex-wrap: wrap; }
 .legend-item { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-2); }
+.legend-button {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.03);
+  border-radius: 999px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+.legend-button:hover { border-color: rgba(34,211,238,0.35); color: var(--text-0); transform: translateY(-1px); }
+.legend-button.active {
+  color: var(--text-0);
+  border-color: rgba(34,211,238,0.35);
+  background: linear-gradient(90deg, rgba(34,211,238,0.12), rgba(52,211,153,0.12));
+}
+.legend-button:focus-visible {
+  outline: 2px solid rgba(34,211,238,0.65);
+  outline-offset: 2px;
+}
 .legend-dot { width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 0 2px rgba(255,255,255,0.04); }
 .legend-dot.cloud { background: #3b4a7a; }
 .legend-dot.frontier { background: var(--grad-frontier); border-radius: 2px; width: 18px; height: 4px; }
@@ -224,6 +243,58 @@ html, body {
 .legend-dot.sharpe { background: var(--accent-3); box-shadow: 0 0 12px var(--accent-3); }
 .legend-dot.asset { background: var(--accent-5); border-radius: 2px; transform: rotate(45deg); }
 .legend-dot.finder { background: var(--accent-2); box-shadow: 0 0 12px rgba(34,211,238,0.5); }
+.legend-explainer {
+  margin: 18px 0 12px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, rgba(17,24,45,0.9), rgba(10,14,30,0.96));
+}
+.legend-explainer-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.legend-explainer-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-0);
+}
+.legend-explainer-hint {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+}
+.legend-explainer-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.legend-explainer-card {
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(148,163,205,0.14);
+  background: rgba(255,255,255,0.03);
+}
+.legend-explainer-title {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 8px;
+  font-weight: 700;
+}
+.legend-explainer-card p {
+  margin: 0;
+  color: var(--text-1);
+  font-size: 13px;
+  line-height: 1.6;
+}
+@media (max-width: 760px) {
+  .legend-explainer-grid { grid-template-columns: 1fr; }
+}
 
 .tooltip-card { background: rgba(10,14,30,0.95); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 12px 14px; box-shadow: 0 20px 60px -20px rgba(0,0,0,0.8); font-family: var(--font-sans); min-width: 220px; backdrop-filter: blur(14px); }
 .tooltip-label { font-size: 10px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
