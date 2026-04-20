@@ -305,25 +305,25 @@ const legendDefinitions = {
     dotClass: 'sharpe',
     label: 'Max Sharpe',
     financial: 'The maximum Sharpe portfolio is the mix with the highest excess return relative to its volatility. In plain finance terms, it is the portfolio that gives the most reward for each unit of risk in this opportunity set.',
-    eli5: 'This is the portfolio that gives the biggest treat for each bite of risk. It is the app’s best “bang for your buck” choice.'
+    eli5: "This is the app's best bang-for-your-buck pick — the mix that gets you the most reward per unit of risk you take on."
   },
   minvar: {
     dotClass: 'minvar',
     label: 'Min variance',
     financial: 'The minimum variance portfolio is the lowest-volatility mix the app found. It focuses on smoothing the ride as much as possible, even if that means accepting a lower expected return.',
-    eli5: 'This is the calmest bike ride the app could find. It may not get you the biggest prize, but it tries hardest to avoid bumps.'
+    eli5: "This is the smoothest ride the app could find. It may not reach the biggest prize, but it works hardest to avoid the bumps."
   },
   finder: {
     dotClass: 'finder',
     label: 'Finder result',
     financial: 'The finder result is the portfolio the app selected because it best matches your target, such as a required return or a maximum risk limit. In advisor and ticker modes, it is the recommended portfolio under those rules.',
-    eli5: 'This is the app saying, “Based on what you asked for, pick this one.” It is the closest match to the goal you typed in.'
+    eli5: "This is the app saying, \"Based on what you asked for, pick this one.\" It is the closest match to the goal you typed in."
   },
   asset: {
     dotClass: 'asset',
     label: 'Active assets',
     financial: 'The active assets are the currently selected building blocks plotted individually on the chart. They help you compare each standalone asset with the portfolios built from combining them.',
-    eli5: 'These are the single Lego bricks before you snap them together. They let you see how each piece behaves on its own compared with the mixed bundles.'
+    eli5: 'These are the individual pieces plotted on their own, before any blending. You can see how each one behaves by itself and compare that with the combined portfolios around it.'
   }
 };
 
@@ -617,10 +617,12 @@ const EfficientFrontierApp = () => {
       : 'No portfolios available for the current settings.';
   const tickerStatusMessage = tickerFetchState.status === 'loading' ? 'Loading ticker data from your local backend…' : tickerFetchState.status === 'error' ? tickerFetchState.error : tickerDataset.error || '';
   const finderLegendLabel = activeTab === 'build' ? 'Finder result' : activeTab === 'advisor' ? 'Advisor recommendation' : 'Ticker recommendation';
-  const activeLegendDefinition = activeLegendKey === 'finder'
-    ? { ...legendDefinitions.finder, label: finderLegendLabel }
-    : legendDefinitions[activeLegendKey];
-  const chartLegendItems = [
+  const activeLegendDefinition = useMemo(() => (
+    activeLegendKey === 'finder'
+      ? { ...legendDefinitions.finder, label: finderLegendLabel }
+      : legendDefinitions[activeLegendKey]
+  ), [activeLegendKey, finderLegendLabel]);
+  const chartLegendItems = useMemo(() => [
     legendDefinitions.cloud,
     legendDefinitions.frontier,
     legendDefinitions.cml,
@@ -628,7 +630,7 @@ const EfficientFrontierApp = () => {
     legendDefinitions.minvar,
     { ...legendDefinitions.finder, label: finderLegendLabel },
     legendDefinitions.asset
-  ];
+  ], [finderLegendLabel]);
 
   return (
     <div className="app-shell">
@@ -752,7 +754,7 @@ const EfficientFrontierApp = () => {
                 <button
                   key={item.dotClass}
                   type="button"
-                  className={`legend-item legend-button ${activeLegendKey === item.dotClass ? 'active' : ''}`}
+                  className="legend-item legend-button"
                   onClick={() => setActiveLegendKey(item.dotClass)}
                   aria-pressed={activeLegendKey === item.dotClass}
                 >
@@ -767,12 +769,12 @@ const EfficientFrontierApp = () => {
               <span className={`legend-dot ${activeLegendDefinition.dotClass}`} />
               <div>
                 <div className="legend-explainer-label">{activeLegendDefinition.label}</div>
-                <div className="legend-explainer-hint">Click any legend item to switch explanations.</div>
+                <div className="legend-explainer-hint">Tap any legend item to switch explanations. Hover a chart point for its numeric detail.</div>
               </div>
             </div>
             <div className="legend-explainer-grid">
               <div className="legend-explainer-card">
-                <div className="legend-explainer-title">Financial Explanation</div>
+                <div className="legend-explainer-title">Technical</div>
                 <p>{activeLegendDefinition.financial}</p>
               </div>
               <div className="legend-explainer-card">
