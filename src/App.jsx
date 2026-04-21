@@ -87,71 +87,6 @@ const portfolioKey = (point) => {
   return `${point?.risk ?? 0}:${point?.return ?? 0}`;
 };
 
-const summarizeAssetMix = (assetNames) => {
-  const counts = assetNames.reduce((acc, assetName) => {
-    const assetClass = assetTaxonomy[assetName]?.class;
-    const bucket = assetClass === 'equity'
-      ? 'equities'
-      : assetClass === 'bond'
-        ? 'bonds'
-        : assetClass === 'cash'
-          ? 'cash'
-          : 'alternatives';
-    acc[bucket] += 1;
-    return acc;
-  }, { equities: 0, bonds: 0, alternatives: 0, cash: 0 });
-
-  return [
-    counts.equities ? `${counts.equities} ${counts.equities === 1 ? 'equity' : 'equities'}` : null,
-    counts.bonds ? `${counts.bonds} ${counts.bonds === 1 ? 'bond' : 'bonds'}` : null,
-    counts.alternatives ? `${counts.alternatives} alternative${counts.alternatives === 1 ? '' : 's'}` : null,
-    counts.cash ? `${counts.cash} cash` : null
-  ].filter(Boolean).join(' · ');
-};
-
-const averageSelectedCorrelation = (assetNames) => {
-  if (assetNames.length <= 1) return 0;
-  let total = 0;
-  let pairs = 0;
-  for (let i = 0; i < assetNames.length; i += 1) {
-    for (let j = i + 1; j < assetNames.length; j += 1) {
-      total += correlationMatrix[assetNames[i]]?.[assetNames[j]] ?? 0;
-      pairs += 1;
-    }
-  }
-  return pairs > 0 ? total / pairs : 0;
-};
-
-const describeDiversification = (assetNames) => {
-  const avgCorrelation = averageSelectedCorrelation(assetNames);
-  if (assetNames.length <= 2) {
-    return {
-      label: 'Concentrated',
-      detail: 'Two-asset basket with limited diversification room.',
-      avgCorrelation
-    };
-  }
-  if (avgCorrelation <= 0.35) {
-    return {
-      label: 'Well diversified',
-      detail: `Average pairwise correlation ${fmtNum(avgCorrelation, 2)}`,
-      avgCorrelation
-    };
-  }
-  if (avgCorrelation <= 0.6) {
-    return {
-      label: 'Balanced',
-      detail: `Average pairwise correlation ${fmtNum(avgCorrelation, 2)}`,
-      avgCorrelation
-    };
-  }
-  return {
-    label: 'Concentrated',
-    detail: `Average pairwise correlation ${fmtNum(avgCorrelation, 2)}`,
-    avgCorrelation
-  };
-};
-
 const summarizePortfolios = (portfolios) => {
   const frontier = extractEfficientFrontier(portfolios);
   const sortedByRisk = [...portfolios].sort((a, b) => (a.risk === b.risk ? b.return - a.return : a.risk - b.risk));
@@ -445,18 +380,6 @@ const EfficientFrontierApp = () => {
     if (buildFrontierPoints.length === 0) return null;
     return buildFrontierPoints.find((point) => point.frontierKey === buildSelectedPointKey) ?? buildDefaultPoint;
   }, [buildDefaultPoint, buildFrontierPoints, buildSelectedPointKey]);
-  const buildSelectionSummary = useMemo(() => describeDiversification(buildOptimizedSet.activeAssets ?? []), [buildOptimizedSet.activeAssets]);
-  const buildReturnRange = useMemo(() => {
-    if (buildFrontierPoints.length === 0) return null;
-    const returns = buildFrontierPoints.map((point) => point.return);
-    return { low: Math.min(...returns), high: Math.max(...returns) };
-  }, [buildFrontierPoints]);
-  const buildRiskRange = useMemo(() => {
-    if (buildFrontierPoints.length === 0) return null;
-    const risks = buildFrontierPoints.map((point) => point.risk);
-    return { low: Math.min(...risks), high: Math.max(...risks) };
-  }, [buildFrontierPoints]);
-
   useEffect(() => {
     if (!buildSelectedPortfolio) return;
     const nextKey = buildSelectedPortfolio.frontierKey ?? portfolioKey(buildSelectedPortfolio);
@@ -526,7 +449,12 @@ const EfficientFrontierApp = () => {
       detail: `Minimum-${advisorMode === 'requiredReturn' ? 'risk' : 'variance'} point meeting your target (±${SAMPLING_TOLERANCE}% sampling tolerance).`
     };
   })();
-  const displayCloud = useMemo(() => currentSet.portfolios.filter((_, index) => index % (currentSet.portfolios.length > 7000 ? 3 : currentSet.portfolios.length > 4500 ? 2 : 1) === 0), [currentSet.portfolios]);
+  const displayCloud = useMemo(() => {
+    const sampleEvery = buildSelectorDragging && activeTab === 'build'
+      ? currentSet.portfolios.length > 9000 ? 12 : currentSet.portfolios.length > 6000 ? 8 : currentSet.portfolios.length > 3500 ? 5 : 3
+      : currentSet.portfolios.length > 7000 ? 3 : currentSet.portfolios.length > 4500 ? 2 : 1;
+    return currentSet.portfolios.filter((_, index) => index % sampleEvery === 0);
+  }, [activeTab, buildSelectorDragging, currentSet.portfolios]);
   const donutSegments = (point) => point.selectedAssets.map((name, index) => ({ name, value: point.weightPct[index], color: slotColors[index % slotColors.length] }));
   const handleBuildPointSelection = (point) => {
     if (!point) return;
@@ -701,27 +629,21 @@ const EfficientFrontierApp = () => {
             </div>
             <div className="finder-grid">
               <div className="panel finder-panel">
-                <div className="panel-header"><h2 className="panel-title">Basket summary</h2><div className={`feasibility-badge feasibility-${feasibilityBadge.kind}`}>{feasibilityBadge.short}</div></div>
-                <div className="feasibility-detail">{feasibilityBadge.detail}</div>
-                <div className="insight-metrics">
-                  <div className="stat">
-                    <span className="stat-label">Selected assets</span>
-                    <span className="stat-value">{(buildOptimizedSet.activeAssets ?? []).length}</span>
-                  </div>
-                  <div className="stat">
-                    <span className="stat-label">Diversification</span>
-                    <span className="stat-value">{buildSelectionSummary.label}</span>
-                  </div>
-                  <div className="stat">
-                    <span className="stat-label">Frontier range</span>
-                    <span className="stat-value">{buildReturnRange ? `${fmtPct(buildReturnRange.low, 1)} – ${fmtPct(buildReturnRange.high, 1)}` : '—'}</span>
-                  </div>
-                </div>
-                <div className="finder-summary">
-                  <div className="summary-chip">{summarizeAssetMix(buildOptimizedSet.activeAssets ?? [])}</div>
-                  <div className="summary-chip">{buildSelectionSummary.detail}</div>
-                  <div className="summary-chip">{buildRiskRange ? `Risk ${fmtPct(buildRiskRange.low, 1)} – ${fmtPct(buildRiskRange.high, 1)}` : 'No frontier yet'}</div>
-                </div>
+                <div className="panel-header"><h2 className="panel-title">Selected portfolio</h2><div className={`feasibility-badge feasibility-${feasibilityBadge.kind}`}>{feasibilityBadge.short}</div></div>
+                {buildSelectedPortfolio ? (
+                  <>
+                    <div className="feasibility-detail">Drag the chart marker along the frontier to inspect different return, risk, and allocation mixes from your chosen basket.</div>
+                    <div className="insight-metrics">
+                      <div className="stat"><span className="stat-label">Selected return</span><span className="stat-value">{fmtPct(buildSelectedPortfolio.return, 1)}</span></div>
+                      <div className="stat"><span className="stat-label">Selected risk</span><span className="stat-value">{fmtPct(buildSelectedPortfolio.risk, 1)}</span></div>
+                      <div className="stat"><span className="stat-label">Sharpe</span><span className="stat-value">{Number.isFinite(buildSelectedPortfolio.sharpe) ? fmtNum(buildSelectedPortfolio.sharpe) : '—'}</span></div>
+                    </div>
+                    <div className="donut-wrap">
+                      <Donut segments={donutSegments(buildSelectedPortfolio)} centerTop={fmtPct(buildSelectedPortfolio.return, 1)} centerBottom="RETURN" />
+                      <div className="donut-legend">{buildSelectedPortfolio.selectedAssets.map((name, index) => <div className="donut-legend-row" key={name}><span className="legend-swatch" style={{ background: slotColors[index % slotColors.length] }} /><span className="name">{name}</span><span className="pct">{buildSelectedPortfolio.weightPct[index]}%</span></div>)}</div>
+                    </div>
+                  </>
+                ) : <div className="empty-state">Select at least two assets to generate an efficient frontier.</div>}
               </div>
               <div className="panel recommendation-panel">
                 <div className="panel-header"><h2 className="panel-title">Maximum Sharpe portfolio</h2><div className="feasibility-badge feasibility-success">reference mix</div></div>
@@ -779,31 +701,13 @@ const EfficientFrontierApp = () => {
           <div className="chart-header">
             <div><h2 className="panel-title">{activeTab === 'build' ? 'Estimated frontier + selected portfolio' : 'Advisor search + recommendation'}</h2><div className="header-meta" style={{ fontSize: 10, marginTop: 8 }}>{activeTab === 'advisor' ? 'sampled portfolios with diversification constraints for more realistic recommendations' : 'sampled Monte Carlo upper envelope for client-side interactivity · drag the highlighted point along the frontier'}</div></div>
           </div>
-          {activeTab === 'build' && buildSelectedPortfolio ? (
-            <div className="chart-inset">
-              <div className="chart-inset-title">Selected portfolio</div>
-              <div className="chart-inset-metrics">
-                <div className="chart-inset-metric"><span>Selected Risk</span><strong>{fmtPct(buildSelectedPortfolio.risk, 1)}</strong></div>
-                <div className="chart-inset-metric"><span>Selected Return</span><strong>{fmtPct(buildSelectedPortfolio.return, 1)}</strong></div>
-              </div>
-              <div className="chart-inset-mix">
-                {buildSelectedPortfolio.selectedAssets.map((name, index) => (
-                  <div className="chart-inset-mix-row" key={name}>
-                    <span className="legend-swatch" style={{ background: slotColors[index % slotColors.length] }} />
-                    <span className="name">{name}</span>
-                    <span className="pct">{buildSelectedPortfolio.weightPct[index]}%</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
           <ResponsiveContainer width="100%" height={520}>
             <ScatterChart margin={{ top: 20, right: 30, bottom: 50, left: 50 }}>
               <defs><linearGradient id="frontierLine" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#22d3ee" /><stop offset="55%" stopColor="#34d399" /><stop offset="100%" stopColor="#f4c35a" /></linearGradient><linearGradient id="cmlLine" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#f5f7ff" /><stop offset="100%" stopColor="#f4c35a" /></linearGradient></defs>
               <CartesianGrid strokeDasharray="2 4" stroke="rgba(148,163,205,0.14)" />
               <XAxis type="number" dataKey="risk" domain={[0, xMax]} tickFormatter={(value) => `${value}%`} stroke="rgba(148,163,205,0.4)" tickLine={false}><Label value="RISK (σ)" position="insideBottom" offset={-18} className="recharts-label" /></XAxis>
               <YAxis type="number" dataKey="return" domain={[yMin, yMax]} tickFormatter={(value) => `${value}%`} stroke="rgba(148,163,205,0.4)" tickLine={false}><Label value="RETURN" angle={-90} position="insideLeft" offset={10} className="recharts-label" /></YAxis>
-              <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(148,163,205,0.25)', strokeDasharray: '2 3' }} />
+              <Tooltip content={buildSelectorDragging ? <></> : <CustomTooltip />} cursor={buildSelectorDragging ? false : { stroke: 'rgba(148,163,205,0.25)', strokeDasharray: '2 3' }} />
               <Scatter name="Sampled cloud" data={displayCloud} shape={<CloudDot />} />
               <Scatter name="Estimated frontier" data={activeTab === 'build' ? buildFrontierPoints : currentSet.frontier.map((point) => ({ ...point, label: 'Estimated frontier' }))} shape={renderFrontierDot} line={{ stroke: 'url(#frontierLine)', strokeWidth: 2.5 }} lineType="joint" />
               <Scatter name="Capital Market Line" data={capitalMarketLine} shape={() => null} line={{ stroke: 'url(#cmlLine)', strokeWidth: 2, strokeDasharray: '6 4' }} lineType="joint" />
