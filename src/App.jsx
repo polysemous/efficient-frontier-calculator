@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CartesianGrid,
   ResponsiveContainer,
@@ -26,6 +26,10 @@ import {
 } from './lib/portfolioMath';
 
 const SAMPLING_TOLERANCE = 0.25; // percentage points on return & risk axes
+const CHART_LAYOUT = {
+  left: 92,
+  right: 42
+};
 
 const allAssetNames = Object.keys(assetData).sort((a, b) => a.localeCompare(b));
 const isReferenceAsset = (assetName) => assetTaxonomy[assetName]?.class === 'reference';
@@ -336,6 +340,8 @@ const Donut = ({ segments, centerTop, centerBottom }) => {
 };
 
 const EfficientFrontierApp = () => {
+  const chartPanelRef = useRef(null);
+  const dragFrameRef = useRef(null);
   const [activeTab, setActiveTab] = useState('build');
   const [assetCount, setAssetCount] = useState(3);
   const [selected, setSelected] = useState(buildInitialSelection(3));
@@ -457,17 +463,6 @@ const EfficientFrontierApp = () => {
     if (nextKey !== buildSelectedPointKey) setBuildSelectedPointKey(nextKey);
   }, [buildSelectedPointKey, buildSelectedPortfolio]);
 
-  useEffect(() => {
-    if (!buildSelectorDragging) return undefined;
-    const stopDragging = () => setBuildSelectorDragging(false);
-    window.addEventListener('mouseup', stopDragging);
-    window.addEventListener('touchend', stopDragging);
-    return () => {
-      window.removeEventListener('mouseup', stopDragging);
-      window.removeEventListener('touchend', stopDragging);
-    };
-  }, [buildSelectorDragging]);
-
   const currentSet = activeTab === 'build' ? buildOptimizedSet : advisorOptimizedSet;
   const currentAlternatives = activeTab === 'build' ? [] : advisorAlternatives;
   const recommendation = activeTab === 'build' ? buildSelectedPortfolio : advisorFinderResults.primary;
@@ -537,6 +532,26 @@ const EfficientFrontierApp = () => {
     if (!point) return;
     setBuildSelectedPointKey(point.frontierKey ?? portfolioKey(point));
   };
+  const updateBuildSelectionFromPointer = (clientX) => {
+    if (activeTab !== 'build' || !buildFrontierPoints.length || !chartPanelRef.current) return;
+    const bounds = chartPanelRef.current.getBoundingClientRect();
+    const plotLeft = bounds.left + CHART_LAYOUT.left;
+    const plotRight = bounds.right - CHART_LAYOUT.right;
+    const usableWidth = Math.max(plotRight - plotLeft, 1);
+    const clampedX = Math.max(plotLeft, Math.min(clientX, plotRight));
+    const normalized = (clampedX - plotLeft) / usableWidth;
+    const targetRisk = normalized * xMax;
+    let closest = buildFrontierPoints[0];
+    let smallestDistance = Math.abs((closest?.risk ?? 0) - targetRisk);
+    for (const point of buildFrontierPoints) {
+      const distance = Math.abs(point.risk - targetRisk);
+      if (distance < smallestDistance) {
+        closest = point;
+        smallestDistance = distance;
+      }
+    }
+    handleBuildPointSelection(closest);
+  };
 
   const advisorFilterSummary = [
     includeOnlyPublicMarkets ? 'public markets only' : null,
@@ -601,6 +616,42 @@ const EfficientFrontierApp = () => {
       />
     );
   };
+
+  useEffect(() => {
+    if (!buildSelectorDragging) return undefined;
+    const scheduleMove = (clientX) => {
+      if (dragFrameRef.current != null) cancelAnimationFrame(dragFrameRef.current);
+      dragFrameRef.current = requestAnimationFrame(() => {
+        updateBuildSelectionFromPointer(clientX);
+        dragFrameRef.current = null;
+      });
+    };
+    const handleMove = (event) => scheduleMove(event.clientX);
+    const handleTouchMove = (event) => {
+      if (event.touches[0]) scheduleMove(event.touches[0].clientX);
+    };
+    const stopDragging = () => {
+      setBuildSelectorDragging(false);
+      if (dragFrameRef.current != null) {
+        cancelAnimationFrame(dragFrameRef.current);
+        dragFrameRef.current = null;
+      }
+    };
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('touchmove', handleTouchMove, { passive: true });
+    window.addEventListener('mouseup', stopDragging);
+    window.addEventListener('touchend', stopDragging);
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('mouseup', stopDragging);
+      window.removeEventListener('touchend', stopDragging);
+      if (dragFrameRef.current != null) {
+        cancelAnimationFrame(dragFrameRef.current);
+        dragFrameRef.current = null;
+      }
+    };
+  }, [buildFrontierPoints, buildSelectorDragging, xMax, activeTab]);
 
   return (
     <div className="app-shell">
@@ -724,7 +775,7 @@ const EfficientFrontierApp = () => {
           </div>
         )}
 
-        <div className="chart-panel">
+        <div className="chart-panel" ref={chartPanelRef}>
           <div className="chart-header">
             <div><h2 className="panel-title">{activeTab === 'build' ? 'Estimated frontier + selected portfolio' : 'Advisor search + recommendation'}</h2><div className="header-meta" style={{ fontSize: 10, marginTop: 8 }}>{activeTab === 'advisor' ? 'sampled portfolios with diversification constraints for more realistic recommendations' : 'sampled Monte Carlo upper envelope for client-side interactivity · drag the highlighted point along the frontier'}</div></div>
           </div>

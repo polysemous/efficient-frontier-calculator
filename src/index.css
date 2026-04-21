@@ -114,9 +114,9 @@ html, body {
 .chart-inset {
   position: absolute;
   top: 72px;
-  left: 24px;
+  left: 88px;
   z-index: 3;
-  width: min(320px, calc(100% - 48px));
+  width: min(320px, calc(100% - 112px));
   padding: 14px 16px;
   border-radius: var(--radius-md);
   border: 1px solid rgba(34,211,238,0.24);
