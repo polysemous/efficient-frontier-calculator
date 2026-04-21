@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CartesianGrid,
   ResponsiveContainer,
@@ -26,6 +26,10 @@ import {
 } from './lib/portfolioMath';
 
 const SAMPLING_TOLERANCE = 0.25; // percentage points on return & risk axes
+const CHART_LAYOUT = {
+  left: 92,
+  right: 42
+};
 
 const allAssetNames = Object.keys(assetData).sort((a, b) => a.localeCompare(b));
 const isReferenceAsset = (assetName) => assetTaxonomy[assetName]?.class === 'reference';
@@ -76,6 +80,13 @@ const buildInitialSelection = (count) => {
   return seed;
 };
 
+const portfolioKey = (point) => {
+  if (Array.isArray(point?.weights) && point.weights.length > 0) {
+    return point.weights.map((weight) => weight.toFixed(4)).join('|');
+  }
+  return `${point?.risk ?? 0}:${point?.return ?? 0}`;
+};
+
 const summarizePortfolios = (portfolios) => {
   const frontier = extractEfficientFrontier(portfolios);
   const sortedByRisk = [...portfolios].sort((a, b) => (a.risk === b.risk ? b.return - a.return : a.risk - b.risk));
@@ -114,6 +125,16 @@ const FinderShape = ({ cx, cy }) => {
       <circle cx={cx} cy={cy} r={14} fill="#22d3ee" opacity={0.15} />
       <circle cx={cx} cy={cy} r={9} fill="#22d3ee" opacity={0.28} />
       <circle cx={cx} cy={cy} r={4.5} fill="#ecfeff" stroke="#22d3ee" strokeWidth={1.4} />
+    </g>
+  );
+};
+const SelectedPortfolioShape = ({ cx, cy, ...rest }) => {
+  if (cx == null || cy == null) return null;
+  return (
+    <g {...rest}>
+      <circle cx={cx} cy={cy} r={16} fill="#22d3ee" opacity={0.12} />
+      <circle cx={cx} cy={cy} r={10} fill="#22d3ee" opacity={0.22} />
+      <circle cx={cx} cy={cy} r={5.5} fill="#ecfeff" stroke="#22d3ee" strokeWidth={1.8} />
     </g>
   );
 };
@@ -188,6 +209,12 @@ const legendDefinitions = {
     label: 'Active assets',
     financial: 'The active assets are the currently selected building blocks plotted individually on the chart. They help you compare each standalone asset with the portfolios built from combining them.',
     eli5: 'These are the individual pieces plotted on their own, before any blending. You can see how each one behaves by itself and compare that with the combined portfolios around it.'
+  },
+  selected: {
+    dotClass: 'finder',
+    label: 'Selected portfolio',
+    financial: 'The selected portfolio is the specific point you are inspecting on the efficient frontier. In Build My Own mode, this marker can be dragged across the frontier to compare the exact risk, return, and weight mix at each sampled portfolio point.',
+    eli5: 'This is your finger on the curve. Slide it up or down to see what mix the app would use at that exact spot and how much extra reward comes with the extra bumpiness.'
   }
 };
 
@@ -248,13 +275,12 @@ const Donut = ({ segments, centerTop, centerBottom }) => {
 };
 
 const EfficientFrontierApp = () => {
+  const chartPanelRef = useRef(null);
+  const dragFrameRef = useRef(null);
   const [activeTab, setActiveTab] = useState('build');
   const [assetCount, setAssetCount] = useState(3);
   const [selected, setSelected] = useState(buildInitialSelection(3));
   const [riskFreeRate, setRiskFreeRate] = useState(defaultRiskFreeRate.toFixed(2));
-  const [buildFinderMode, setBuildFinderMode] = useState('requiredReturn');
-  const [buildFinderTarget, setBuildFinderTarget] = useState('8.00');
-
   const [advisorMode, setAdvisorMode] = useState('requiredReturn');
   const [advisorTarget, setAdvisorTarget] = useState('8.00');
   const [advisorMaxAssets, setAdvisorMaxAssets] = useState(5);
@@ -265,6 +291,8 @@ const EfficientFrontierApp = () => {
   const [excludeAlternatives, setExcludeAlternatives] = useState(false);
   const [requireBond, setRequireBond] = useState(false);
   const [activeLegendKey, setActiveLegendKey] = useState('cloud');
+  const [buildSelectedPointKey, setBuildSelectedPointKey] = useState(null);
+  const [buildSelectorDragging, setBuildSelectorDragging] = useState(false);
 
   const parsedRiskFreeRate = Number(riskFreeRate);
   const riskFreeRateValue = Number.isFinite(parsedRiskFreeRate) ? parsedRiskFreeRate : defaultRiskFreeRate;
@@ -306,9 +334,6 @@ const EfficientFrontierApp = () => {
     return { modeLabel: 'Build My Own', activeAssets, sampleCount, portfolios, ...summarizePortfolios(portfolios) };
   }, [activeTab, assetCount, riskFreeRateValue, selected]);
 
-  const buildFinderResults = useMemo(() => findPrimaryPortfolio({ portfolios: buildOptimizedSet.portfolios, mode: buildFinderMode, targetValue: buildFinderTarget }), [buildFinderMode, buildFinderTarget, buildOptimizedSet.portfolios]);
-  const buildAlternatives = useMemo(() => findAlternatives({ primary: buildFinderResults.primary, portfolios: buildOptimizedSet.portfolios, tolerance: SAMPLING_TOLERANCE }), [buildFinderResults.primary, buildOptimizedSet.portfolios]);
-
   const advisorUniverse = useMemo(() => investableAssetNames.filter((assetName) => {
     if (includeOnlyPublicMarkets && isPrivateAlternativeAsset(assetName)) return false;
     if (excludeAlternatives && isAlternativeAsset(assetName)) return false;
@@ -342,15 +367,32 @@ const EfficientFrontierApp = () => {
 
   const advisorFinderResults = useMemo(() => findPrimaryPortfolio({ portfolios: advisorOptimizedSet.portfolios, mode: advisorMode, targetValue: advisorTarget }), [advisorMode, advisorOptimizedSet.portfolios, advisorTarget]);
   const advisorAlternatives = useMemo(() => findAlternatives({ primary: advisorFinderResults.primary, portfolios: advisorOptimizedSet.portfolios, tolerance: SAMPLING_TOLERANCE }), [advisorFinderResults.primary, advisorOptimizedSet.portfolios]);
+  const buildFrontierPoints = useMemo(
+    () => buildOptimizedSet.frontier.map((point) => ({ ...point, label: 'Estimated frontier', frontierKey: portfolioKey(point) })),
+    [buildOptimizedSet.frontier]
+  );
+  const buildDefaultPoint = useMemo(() => {
+    if (buildFrontierPoints.length === 0) return null;
+    const maxSharpeKey = buildOptimizedSet.maxSharpe[0] ? portfolioKey(buildOptimizedSet.maxSharpe[0]) : null;
+    return buildFrontierPoints.find((point) => point.frontierKey === maxSharpeKey) ?? buildFrontierPoints[Math.floor(buildFrontierPoints.length / 2)];
+  }, [buildFrontierPoints, buildOptimizedSet.maxSharpe]);
+  const buildSelectedPortfolio = useMemo(() => {
+    if (buildFrontierPoints.length === 0) return null;
+    return buildFrontierPoints.find((point) => point.frontierKey === buildSelectedPointKey) ?? buildDefaultPoint;
+  }, [buildDefaultPoint, buildFrontierPoints, buildSelectedPointKey]);
+  useEffect(() => {
+    if (!buildSelectedPortfolio) return;
+    const nextKey = buildSelectedPortfolio.frontierKey ?? portfolioKey(buildSelectedPortfolio);
+    if (nextKey !== buildSelectedPointKey) setBuildSelectedPointKey(nextKey);
+  }, [buildSelectedPointKey, buildSelectedPortfolio]);
 
   const currentSet = activeTab === 'build' ? buildOptimizedSet : advisorOptimizedSet;
-  const currentFinderResults = activeTab === 'build' ? buildFinderResults : advisorFinderResults;
-  const currentAlternatives = activeTab === 'build' ? buildAlternatives : advisorAlternatives;
-  const currentFinderMode = activeTab === 'build' ? buildFinderMode : advisorMode;
-  const recommendation = currentFinderResults.primary;
-  const primaryStatus = currentFinderResults.status;
-  const isFeasible = primaryStatus === 'on-frontier';
+  const currentAlternatives = activeTab === 'build' ? [] : advisorAlternatives;
+  const recommendation = activeTab === 'build' ? buildSelectedPortfolio : advisorFinderResults.primary;
+  const primaryStatus = activeTab === 'build' ? 'selected' : advisorFinderResults.status;
+  const isFeasible = activeTab === 'build' ? Boolean(buildSelectedPortfolio) : primaryStatus === 'on-frontier';
   const ms = currentSet.maxSharpe[0];
+  const buildReferencePortfolio = ms ?? buildSelectedPortfolio;
   const frontierReturns = currentSet.frontier.map((point) => point.return);
   const frontierLow = frontierReturns.length ? Math.min(...frontierReturns) : 0;
   const frontierHigh = frontierReturns.length ? Math.max(...frontierReturns) : 0;
@@ -370,9 +412,17 @@ const EfficientFrontierApp = () => {
   const allYs = [...basePoints.map((point) => point.return), ...capitalMarketLine.map((point) => point.return)];
   const yMin = Math.floor((allYs.length ? Math.min(...allYs) : 0) - 0.5);
   const yMax = Math.ceil((allYs.length ? Math.max(...allYs) : 0) + 0.5);
-  const recommendationPoint = recommendation ? [{ ...recommendation, label: isFeasible ? (activeTab === 'build' ? 'Finder result' : 'Advisor recommendation') : 'Closest achievable' }] : [];
+  const recommendationPoint = activeTab === 'advisor' && recommendation ? [{ ...recommendation, label: isFeasible ? 'Advisor recommendation' : 'Closest achievable' }] : [];
+  const selectedBuildPoint = activeTab === 'build' && buildSelectedPortfolio ? [{ ...buildSelectedPortfolio, label: 'Selected portfolio' }] : [];
 
   const feasibilityBadge = (() => {
+    if (activeTab === 'build') {
+      return {
+        kind: 'success',
+        short: 'drag the frontier marker',
+        detail: 'Click and drag the selected marker along the curve to inspect different mixes from your chosen basket.'
+      };
+    }
     if (primaryStatus === 'no-target') {
       return { kind: 'neutral', short: 'awaiting target', detail: 'Enter a target to evaluate the frontier.' };
     }
@@ -383,24 +433,53 @@ const EfficientFrontierApp = () => {
       return {
         kind: 'warning',
         short: 'above frontier max',
-        detail: `Target ${fmtPct(currentFinderResults.target, 2)} exceeds the highest achievable return on this asset set (${fmtPct(currentFinderResults.frontierMax ?? 0, 2)}). Showing the maximum-return portfolio.`
+        detail: `Target ${fmtPct(advisorFinderResults.target, 2)} exceeds the highest achievable return on this asset set (${fmtPct(advisorFinderResults.frontierMax ?? 0, 2)}). Showing the maximum-return portfolio.`
       };
     }
     if (primaryStatus === 'below-min-variance') {
       return {
         kind: 'warning',
         short: 'below min-variance floor',
-        detail: `Risk budget ${fmtPct(currentFinderResults.target, 2)} is below the minimum-variance floor (${fmtPct(currentFinderResults.frontierMinRisk ?? 0, 2)}). Showing the minimum-variance portfolio.`
+        detail: `Risk budget ${fmtPct(advisorFinderResults.target, 2)} is below the minimum-variance floor (${fmtPct(advisorFinderResults.frontierMinRisk ?? 0, 2)}). Showing the minimum-variance portfolio.`
       };
     }
     return {
       kind: 'success',
       short: 'on the estimated frontier',
-      detail: `Minimum-${currentFinderMode === 'requiredReturn' ? 'risk' : 'variance'} point meeting your target (±${SAMPLING_TOLERANCE}% sampling tolerance).`
+      detail: `Minimum-${advisorMode === 'requiredReturn' ? 'risk' : 'variance'} point meeting your target (±${SAMPLING_TOLERANCE}% sampling tolerance).`
     };
   })();
-  const displayCloud = useMemo(() => currentSet.portfolios.filter((_, index) => index % (currentSet.portfolios.length > 7000 ? 3 : currentSet.portfolios.length > 4500 ? 2 : 1) === 0), [currentSet.portfolios]);
+  const displayCloud = useMemo(() => {
+    const sampleEvery = buildSelectorDragging && activeTab === 'build'
+      ? currentSet.portfolios.length > 9000 ? 12 : currentSet.portfolios.length > 6000 ? 8 : currentSet.portfolios.length > 3500 ? 5 : 3
+      : currentSet.portfolios.length > 7000 ? 3 : currentSet.portfolios.length > 4500 ? 2 : 1;
+    return currentSet.portfolios.filter((_, index) => index % sampleEvery === 0);
+  }, [activeTab, buildSelectorDragging, currentSet.portfolios]);
   const donutSegments = (point) => point.selectedAssets.map((name, index) => ({ name, value: point.weightPct[index], color: slotColors[index % slotColors.length] }));
+  const handleBuildPointSelection = (point) => {
+    if (!point) return;
+    setBuildSelectedPointKey(point.frontierKey ?? portfolioKey(point));
+  };
+  const updateBuildSelectionFromPointer = (clientX) => {
+    if (activeTab !== 'build' || !buildFrontierPoints.length || !chartPanelRef.current) return;
+    const bounds = chartPanelRef.current.getBoundingClientRect();
+    const plotLeft = bounds.left + CHART_LAYOUT.left;
+    const plotRight = bounds.right - CHART_LAYOUT.right;
+    const usableWidth = Math.max(plotRight - plotLeft, 1);
+    const clampedX = Math.max(plotLeft, Math.min(clientX, plotRight));
+    const normalized = (clampedX - plotLeft) / usableWidth;
+    const targetRisk = normalized * xMax;
+    let closest = buildFrontierPoints[0];
+    let smallestDistance = Math.abs((closest?.risk ?? 0) - targetRisk);
+    for (const point of buildFrontierPoints) {
+      const distance = Math.abs(point.risk - targetRisk);
+      if (distance < smallestDistance) {
+        closest = point;
+        smallestDistance = distance;
+      }
+    }
+    handleBuildPointSelection(closest);
+  };
 
   const advisorFilterSummary = [
     includeOnlyPublicMarkets ? 'public markets only' : null,
@@ -415,21 +494,92 @@ const EfficientFrontierApp = () => {
     : advisorOptimizedSet.portfolios.length === 0
       ? 'Your current advisor constraints produced no candidate portfolios. Try loosening the diversification rules, lowering the minimum asset count, or raising the weight cap.'
       : 'No portfolios available for the current settings.';
-  const finderLegendLabel = activeTab === 'build' ? 'Finder result' : 'Advisor recommendation';
+  const finderLegendLabel = activeTab === 'build' ? 'Selected portfolio' : 'Advisor recommendation';
   const activeLegendDefinition = useMemo(() => (
     activeLegendKey === 'finder'
-      ? { ...legendDefinitions.finder, label: finderLegendLabel }
+      ? activeTab === 'build'
+        ? legendDefinitions.selected
+        : { ...legendDefinitions.finder, label: finderLegendLabel }
       : legendDefinitions[activeLegendKey]
-  ), [activeLegendKey, finderLegendLabel]);
-  const chartLegendItems = useMemo(() => [
-    legendDefinitions.cloud,
-    legendDefinitions.frontier,
-    legendDefinitions.cml,
-    legendDefinitions.sharpe,
-    legendDefinitions.minvar,
-    { ...legendDefinitions.finder, label: finderLegendLabel },
-    legendDefinitions.asset
-  ], [finderLegendLabel]);
+  ), [activeLegendKey, activeTab, finderLegendLabel]);
+  const chartLegendItems = useMemo(() => {
+    const items = [
+      legendDefinitions.cloud,
+      legendDefinitions.frontier,
+      legendDefinitions.cml,
+      legendDefinitions.sharpe,
+      legendDefinitions.minvar,
+      activeTab === 'build' ? legendDefinitions.selected : { ...legendDefinitions.finder, label: finderLegendLabel },
+      legendDefinitions.asset
+    ];
+    return items;
+  }, [activeTab, finderLegendLabel]);
+  const renderFrontierDot = (props) => {
+    const point = props?.payload;
+    const selectedKey = buildSelectedPortfolio?.frontierKey ?? portfolioKey(buildSelectedPortfolio);
+    const pointKey = point?.frontierKey ?? portfolioKey(point);
+    const isSelectedPoint = activeTab === 'build' && selectedKey && pointKey === selectedKey;
+    return (
+      <circle
+        cx={props.cx}
+        cy={props.cy}
+        r={isSelectedPoint ? 4.2 : 3}
+        fill={isSelectedPoint ? '#ecfeff' : '#34d399'}
+        stroke={isSelectedPoint ? '#22d3ee' : '#0b1020'}
+        strokeWidth={isSelectedPoint ? 1.6 : 1}
+        style={{ cursor: activeTab === 'build' ? 'grab' : 'default' }}
+        onMouseDown={() => {
+          if (activeTab !== 'build') return;
+          setBuildSelectorDragging(true);
+          handleBuildPointSelection(point);
+        }}
+        onMouseEnter={() => {
+          if (activeTab !== 'build' || !buildSelectorDragging) return;
+          handleBuildPointSelection(point);
+        }}
+        onTouchStart={() => {
+          if (activeTab !== 'build') return;
+          handleBuildPointSelection(point);
+        }}
+      />
+    );
+  };
+
+  useEffect(() => {
+    if (!buildSelectorDragging) return undefined;
+    const scheduleMove = (clientX) => {
+      if (dragFrameRef.current != null) cancelAnimationFrame(dragFrameRef.current);
+      dragFrameRef.current = requestAnimationFrame(() => {
+        updateBuildSelectionFromPointer(clientX);
+        dragFrameRef.current = null;
+      });
+    };
+    const handleMove = (event) => scheduleMove(event.clientX);
+    const handleTouchMove = (event) => {
+      if (event.touches[0]) scheduleMove(event.touches[0].clientX);
+    };
+    const stopDragging = () => {
+      setBuildSelectorDragging(false);
+      if (dragFrameRef.current != null) {
+        cancelAnimationFrame(dragFrameRef.current);
+        dragFrameRef.current = null;
+      }
+    };
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('touchmove', handleTouchMove, { passive: true });
+    window.addEventListener('mouseup', stopDragging);
+    window.addEventListener('touchend', stopDragging);
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('mouseup', stopDragging);
+      window.removeEventListener('touchend', stopDragging);
+      if (dragFrameRef.current != null) {
+        cancelAnimationFrame(dragFrameRef.current);
+        dragFrameRef.current = null;
+      }
+    };
+  }, [buildFrontierPoints, buildSelectorDragging, xMax, activeTab]);
 
   return (
     <div className="app-shell">
@@ -478,8 +628,42 @@ const EfficientFrontierApp = () => {
               </div>
             </div>
             <div className="finder-grid">
-              <div className="panel finder-panel"><div className="panel-header"><h2 className="panel-title">Portfolio finder</h2><div className={`feasibility-badge feasibility-${feasibilityBadge.kind}`}>{feasibilityBadge.short}</div></div><div className="mode-toggle"><button className={`mode-button ${buildFinderMode === 'requiredReturn' ? 'active' : ''}`} onClick={() => setBuildFinderMode('requiredReturn')}>Required return</button><button className={`mode-button ${buildFinderMode === 'maxRisk' ? 'active' : ''}`} onClick={() => setBuildFinderMode('maxRisk')}>Maximum risk</button></div><div className="finder-input-row"><div className="rf-card compact full-width"><div className="asset-label">{buildFinderMode === 'requiredReturn' ? 'Target return' : 'Risk ceiling'}</div><div className="rf-input-row"><input className="rf-input" type="number" step="0.10" value={buildFinderTarget} onChange={(event) => setBuildFinderTarget(event.target.value)} /><span className="rf-suffix">%</span></div><div className="rf-hint">Optimize weights within your selected asset set.</div></div></div></div>
-              <div className="panel recommendation-panel"><div className="panel-header"><h2 className="panel-title">Suggested portfolio</h2><div className={`feasibility-badge feasibility-${feasibilityBadge.kind}`}>{feasibilityBadge.short}</div></div>{recommendation ? <><div className="feasibility-detail">{feasibilityBadge.detail}</div><div className="donut-wrap"><Donut segments={donutSegments(recommendation)} centerTop={buildFinderMode === 'requiredReturn' ? fmtPct(recommendation.risk, 1) : fmtPct(recommendation.return, 1)} centerBottom={buildFinderMode === 'requiredReturn' ? 'RISK' : 'RETURN'} /><div className="donut-legend">{recommendation.selectedAssets.map((name, index) => <div className="donut-legend-row" key={name}><span className="legend-swatch" style={{ background: slotColors[index % slotColors.length] }} /><span className="name">{name}</span><span className="pct">{recommendation.weightPct[index]}%</span></div>)}</div></div><div className="insight-metrics"><div className="stat"><span className="stat-label">Return</span><span className="stat-value">{fmtPct(recommendation.return)}</span></div><div className="stat"><span className="stat-label">Risk</span><span className="stat-value">{fmtPct(recommendation.risk)}</span></div><div className="stat"><span className="stat-label">Sharpe</span><span className="stat-value">{Number.isFinite(recommendation.sharpe) ? fmtNum(recommendation.sharpe) : '—'}</span></div></div></> : <div className="empty-state">Enter a target to evaluate candidate portfolios.</div>}</div>
+              <div className="panel finder-panel">
+                <div className="panel-header"><h2 className="panel-title">Selected portfolio</h2><div className={`feasibility-badge feasibility-${feasibilityBadge.kind}`}>{feasibilityBadge.short}</div></div>
+                {buildSelectedPortfolio ? (
+                  <>
+                    <div className="feasibility-detail">Drag the chart marker along the frontier to inspect different return, risk, and allocation mixes from your chosen basket.</div>
+                    <div className="donut-wrap">
+                      <Donut segments={donutSegments(buildSelectedPortfolio)} centerTop={fmtPct(buildSelectedPortfolio.return, 1)} centerBottom="RETURN" />
+                      <div className="donut-legend">{buildSelectedPortfolio.selectedAssets.map((name, index) => <div className="donut-legend-row" key={name}><span className="legend-swatch" style={{ background: slotColors[index % slotColors.length] }} /><span className="name">{name}</span><span className="pct">{buildSelectedPortfolio.weightPct[index]}%</span></div>)}</div>
+                    </div>
+                    <div className="insight-metrics">
+                      <div className="stat"><span className="stat-label">Selected return</span><span className="stat-value">{fmtPct(buildSelectedPortfolio.return, 1)}</span></div>
+                      <div className="stat"><span className="stat-label">Selected risk</span><span className="stat-value">{fmtPct(buildSelectedPortfolio.risk, 1)}</span></div>
+                      <div className="stat"><span className="stat-label">Sharpe</span><span className="stat-value">{Number.isFinite(buildSelectedPortfolio.sharpe) ? fmtNum(buildSelectedPortfolio.sharpe) : '—'}</span></div>
+                    </div>
+                  </>
+                ) : <div className="empty-state">Select at least two assets to generate an efficient frontier.</div>}
+              </div>
+              <div className="panel recommendation-panel">
+                <div className="panel-header"><h2 className="panel-title">Maximum Sharpe portfolio</h2><div className="feasibility-badge feasibility-success">reference mix</div></div>
+                {buildReferencePortfolio ? (
+                  <>
+                    <div className="feasibility-detail">This is the highest risk-adjusted portfolio the app found for your chosen asset basket. Use the chart marker to compare it with other points on the frontier.</div>
+                    <div className="donut-wrap">
+                      <Donut segments={donutSegments(buildReferencePortfolio)} centerTop={fmtPct(buildReferencePortfolio.return, 1)} centerBottom="RETURN" />
+                      <div className="donut-legend">{buildReferencePortfolio.selectedAssets.map((name, index) => <div className="donut-legend-row" key={name}><span className="legend-swatch" style={{ background: slotColors[index % slotColors.length] }} /><span className="name">{name}</span><span className="pct">{buildReferencePortfolio.weightPct[index]}%</span></div>)}</div>
+                    </div>
+                    <div className="insight-metrics">
+                      <div className="stat"><span className="stat-label">Return</span><span className="stat-value">{fmtPct(buildReferencePortfolio.return)}</span></div>
+                      <div className="stat"><span className="stat-label">Risk</span><span className="stat-value">{fmtPct(buildReferencePortfolio.risk)}</span></div>
+                      <div className="stat"><span className="stat-label">Sharpe</span><span className="stat-value">{Number.isFinite(buildReferencePortfolio.sharpe) ? fmtNum(buildReferencePortfolio.sharpe) : '—'}</span></div>
+                      <div className="stat"><span className="stat-label">Avg corr</span><span className="stat-value">{Number.isFinite(buildReferencePortfolio.avgCorrelation) ? fmtNum(buildReferencePortfolio.avgCorrelation, 2) : '—'}</span></div>
+                      <div className="stat"><span className="stat-label">Div ratio</span><span className="stat-value">{Number.isFinite(buildReferencePortfolio.diversificationRatio) ? fmtNum(buildReferencePortfolio.diversificationRatio, 2) : '—'}</span></div>
+                    </div>
+                  </>
+                ) : <div className="empty-state">Select at least two assets to generate an efficient frontier.</div>}
+              </div>
             </div>
           </>
         ) : (
@@ -513,23 +697,59 @@ const EfficientFrontierApp = () => {
           </div>
         )}
 
-        <div className="chart-panel">
+        <div className="chart-panel" ref={chartPanelRef}>
           <div className="chart-header">
-            <div><h2 className="panel-title">{activeTab === 'build' ? 'Estimated frontier + finder result' : 'Advisor search + recommendation'}</h2><div className="header-meta" style={{ fontSize: 10, marginTop: 8 }}>{activeTab === 'advisor' ? 'sampled portfolios with diversification constraints for more realistic recommendations' : 'sampled Monte Carlo upper envelope for client-side interactivity'}</div></div>
-            <div className="chart-legend">
-              {chartLegendItems.map((item) => (
-                <button
-                  key={item.dotClass}
-                  type="button"
-                  className="legend-item legend-button"
-                  onClick={() => setActiveLegendKey(item.dotClass)}
-                  aria-pressed={activeLegendKey === item.dotClass}
-                >
-                  <span className={`legend-dot ${item.dotClass}`} />
-                  <span>{item.label}</span>
-                </button>
-              ))}
-            </div>
+            <div><h2 className="panel-title">{activeTab === 'build' ? 'Estimated frontier + selected portfolio' : 'Advisor search + recommendation'}</h2><div className="header-meta" style={{ fontSize: 10, marginTop: 8 }}>{activeTab === 'advisor' ? 'sampled portfolios with diversification constraints for more realistic recommendations' : 'sampled Monte Carlo upper envelope for client-side interactivity · drag the highlighted point along the frontier'}</div></div>
+          </div>
+          <ResponsiveContainer width="100%" height={520}>
+            <ScatterChart margin={{ top: 20, right: 30, bottom: 50, left: 50 }}>
+              <defs><linearGradient id="frontierLine" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#22d3ee" /><stop offset="55%" stopColor="#34d399" /><stop offset="100%" stopColor="#f4c35a" /></linearGradient><linearGradient id="cmlLine" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#f5f7ff" /><stop offset="100%" stopColor="#f4c35a" /></linearGradient></defs>
+              <CartesianGrid strokeDasharray="2 4" stroke="rgba(148,163,205,0.14)" />
+              <XAxis type="number" dataKey="risk" domain={[0, xMax]} tickFormatter={(value) => `${value}%`} stroke="rgba(148,163,205,0.4)" tickLine={false}><Label value="RISK (σ)" position="insideBottom" offset={-18} className="recharts-label" /></XAxis>
+              <YAxis type="number" dataKey="return" domain={[yMin, yMax]} tickFormatter={(value) => `${value}%`} stroke="rgba(148,163,205,0.4)" tickLine={false}><Label value="RETURN" angle={-90} position="insideLeft" offset={10} className="recharts-label" /></YAxis>
+              <Tooltip content={buildSelectorDragging ? <></> : <CustomTooltip />} cursor={buildSelectorDragging ? false : { stroke: 'rgba(148,163,205,0.25)', strokeDasharray: '2 3' }} />
+              <Scatter name="Sampled cloud" data={displayCloud} shape={<CloudDot />} />
+              <Scatter name="Estimated frontier" data={activeTab === 'build' ? buildFrontierPoints : currentSet.frontier.map((point) => ({ ...point, label: 'Estimated frontier' }))} shape={renderFrontierDot} line={{ stroke: 'url(#frontierLine)', strokeWidth: 2.5 }} lineType="joint" />
+              <Scatter name="Capital Market Line" data={capitalMarketLine} shape={() => null} line={{ stroke: 'url(#cmlLine)', strokeWidth: 2, strokeDasharray: '6 4' }} lineType="joint" />
+              <Scatter name="Risk-free rate" data={capitalMarketLine.slice(0, 1)} shape={<RiskFreeShape />} />
+              <Scatter name="Minimum variance" data={currentSet.minVariance} shape={<MinVarShape />} />
+              <Scatter name="Maximum Sharpe" data={currentSet.maxSharpe} shape={<SharpeShape />} />
+              <Scatter
+                name="Selected portfolio"
+                data={selectedBuildPoint}
+                shape={(props) => (
+                  <SelectedPortfolioShape
+                    {...props}
+                    style={{ cursor: 'grab' }}
+                    onMouseDown={() => {
+                      if (activeTab !== 'build') return;
+                      setBuildSelectorDragging(true);
+                      handleBuildPointSelection(props.payload);
+                    }}
+                    onTouchStart={() => {
+                      if (activeTab !== 'build') return;
+                      handleBuildPointSelection(props.payload);
+                    }}
+                  />
+                )}
+              />
+              <Scatter name="Advisor recommendation" data={recommendationPoint} shape={<FinderShape />} />
+              <Scatter name="Active assets" data={highlightedAssets} shape={<SelectedAssetShape />} />
+            </ScatterChart>
+          </ResponsiveContainer>
+          <div className="chart-legend">
+            {chartLegendItems.map((item) => (
+              <button
+                key={item.dotClass}
+                type="button"
+                className="legend-item legend-button"
+                onClick={() => setActiveLegendKey(item.dotClass)}
+                aria-pressed={activeLegendKey === item.dotClass}
+              >
+                <span className={`legend-dot ${item.dotClass}`} />
+                <span>{item.label}</span>
+              </button>
+            ))}
           </div>
           <div className="legend-explainer" role="status" aria-live="polite">
             <div className="legend-explainer-header">
@@ -550,26 +770,9 @@ const EfficientFrontierApp = () => {
               </div>
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={520}>
-            <ScatterChart margin={{ top: 20, right: 30, bottom: 50, left: 50 }}>
-              <defs><linearGradient id="frontierLine" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#22d3ee" /><stop offset="55%" stopColor="#34d399" /><stop offset="100%" stopColor="#f4c35a" /></linearGradient><linearGradient id="cmlLine" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#f5f7ff" /><stop offset="100%" stopColor="#f4c35a" /></linearGradient></defs>
-              <CartesianGrid strokeDasharray="2 4" stroke="rgba(148,163,205,0.14)" />
-              <XAxis type="number" dataKey="risk" domain={[0, xMax]} tickFormatter={(value) => `${value}%`} stroke="rgba(148,163,205,0.4)" tickLine={false}><Label value="RISK (σ)" position="insideBottom" offset={-18} className="recharts-label" /></XAxis>
-              <YAxis type="number" dataKey="return" domain={[yMin, yMax]} tickFormatter={(value) => `${value}%`} stroke="rgba(148,163,205,0.4)" tickLine={false}><Label value="RETURN" angle={-90} position="insideLeft" offset={10} className="recharts-label" /></YAxis>
-              <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(148,163,205,0.25)', strokeDasharray: '2 3' }} />
-              <Scatter name="Sampled cloud" data={displayCloud} shape={<CloudDot />} />
-              <Scatter name="Estimated frontier" data={currentSet.frontier.map((point) => ({ ...point, label: 'Estimated frontier' }))} shape={<FrontierDot />} line={{ stroke: 'url(#frontierLine)', strokeWidth: 2.5 }} lineType="joint" />
-              <Scatter name="Capital Market Line" data={capitalMarketLine} shape={() => null} line={{ stroke: 'url(#cmlLine)', strokeWidth: 2, strokeDasharray: '6 4' }} lineType="joint" />
-              <Scatter name="Risk-free rate" data={capitalMarketLine.slice(0, 1)} shape={<RiskFreeShape />} />
-              <Scatter name="Minimum variance" data={currentSet.minVariance} shape={<MinVarShape />} />
-              <Scatter name="Maximum Sharpe" data={currentSet.maxSharpe} shape={<SharpeShape />} />
-              <Scatter name={activeTab === 'build' ? 'Finder result' : 'Advisor recommendation'} data={recommendationPoint} shape={<FinderShape />} />
-              <Scatter name="Active assets" data={highlightedAssets} shape={<SelectedAssetShape />} />
-            </ScatterChart>
-          </ResponsiveContainer>
         </div>
 
-        {isFeasible && recommendation && currentAlternatives.length > 0 ? (
+        {activeTab === 'advisor' && isFeasible && recommendation && currentAlternatives.length > 0 ? (
           <details className="panel alternatives-panel">
             <summary>
               <span className="alternatives-summary-title">Show nearby alternatives</span>

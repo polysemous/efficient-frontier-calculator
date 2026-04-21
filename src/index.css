@@ -214,7 +214,7 @@ html, body {
 .status-pill.success { background: rgba(52,211,153,0.12); color: #b7f7dd; border: 1px solid rgba(52,211,153,0.24); }
 .status-pill.warning { background: rgba(244,195,90,0.12); color: #f9e6b2; border: 1px solid rgba(244,195,90,0.24); }
 
-.chart-legend { display: flex; gap: 12px; flex-wrap: wrap; }
+.chart-legend { display: flex; gap: 12px; flex-wrap: wrap; padding: 10px 18px 0; }
 .legend-item { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-2); }
 .legend-button {
   appearance: none;
@@ -244,7 +244,7 @@ html, body {
 .legend-dot.asset { background: var(--accent-5); border-radius: 2px; transform: rotate(45deg); }
 .legend-dot.finder { background: var(--accent-2); box-shadow: 0 0 12px rgba(34,211,238,0.5); }
 .legend-explainer {
-  margin: 18px 0 12px;
+  margin: 18px 18px 12px;
   padding: 18px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
