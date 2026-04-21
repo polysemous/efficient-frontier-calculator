@@ -471,10 +471,10 @@ const EfficientFrontierApp = () => {
   const currentSet = activeTab === 'build' ? buildOptimizedSet : advisorOptimizedSet;
   const currentAlternatives = activeTab === 'build' ? [] : advisorAlternatives;
   const recommendation = activeTab === 'build' ? buildSelectedPortfolio : advisorFinderResults.primary;
-  const buildReferencePortfolio = ms ?? buildSelectedPortfolio;
   const primaryStatus = activeTab === 'build' ? 'selected' : advisorFinderResults.status;
   const isFeasible = activeTab === 'build' ? Boolean(buildSelectedPortfolio) : primaryStatus === 'on-frontier';
   const ms = currentSet.maxSharpe[0];
+  const buildReferencePortfolio = ms ?? buildSelectedPortfolio;
   const frontierReturns = currentSet.frontier.map((point) => point.return);
   const frontierLow = frontierReturns.length ? Math.min(...frontierReturns) : 0;
   const frontierHigh = frontierReturns.length ? Math.max(...frontierReturns) : 0;
