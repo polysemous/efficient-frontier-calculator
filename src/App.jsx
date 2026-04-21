@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   CartesianGrid,
   ResponsiveContainer,
@@ -60,8 +60,6 @@ const diversificationThresholds = {
 
 const fmtPct = (n, d = 2) => `${n.toFixed(d)}%`;
 const fmtNum = (n, d = 3) => n.toFixed(d);
-const fmtDays = (n) => `${n.toFixed(n >= 10 ? 0 : 1)}d`;
-
 const isBondAsset = (assetName) => assetTaxonomy[assetName]?.class === 'bond';
 const isPrivateAlternativeAsset = (assetName) => assetTaxonomy[assetName]?.class === 'alt_private';
 const isAlternativeAsset = (assetName) => ['alt_public', 'alt_private'].includes(assetTaxonomy[assetName]?.class);
@@ -76,42 +74,6 @@ const buildInitialSelection = (count) => {
     if (seed.length === count) break;
   }
   return seed;
-};
-
-const parseTickerInput = (value) => {
-  return [...new Set(
-    value
-      .split(/[\s,]+/)
-      .map((symbol) => symbol.trim().toUpperCase())
-      .filter(Boolean)
-      .filter((symbol) => /^[A-Z.-]+$/.test(symbol))
-  )].slice(0, 10);
-};
-
-const average = (values) => values.reduce((sum, value) => sum + value, 0) / values.length;
-const stdDev = (values) => {
-  if (values.length <= 1) return 0;
-  const mean = average(values);
-  const variance = values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (values.length - 1);
-  return Math.sqrt(Math.max(variance, 0));
-};
-
-const pearsonCorrelation = (a, b) => {
-  if (a.length !== b.length || a.length <= 1) return 0;
-  const meanA = average(a);
-  const meanB = average(b);
-  let numerator = 0;
-  let denomA = 0;
-  let denomB = 0;
-  for (let i = 0; i < a.length; i += 1) {
-    const da = a[i] - meanA;
-    const db = b[i] - meanB;
-    numerator += da * db;
-    denomA += da * da;
-    denomB += db * db;
-  }
-  const denominator = Math.sqrt(denomA * denomB);
-  return denominator > 0 ? numerator / denominator : 0;
 };
 
 const summarizePortfolios = (portfolios) => {
@@ -132,104 +94,6 @@ const emptyPortfolioSet = (modeLabel, extra = {}) => ({
   maxSharpe: [],
   ...extra
 });
-
-const normalizeTickerResponse = (symbol, payload) => {
-  const infoMessage = payload?.data?.Information || payload?.data?.Note || payload?.data?.Error || payload?.error;
-  const series = payload?.data?.['Time Series (Daily)'];
-  if (infoMessage || !series) {
-    return {
-      symbol,
-      source: payload?.source ?? 'api',
-      lastUpdated: payload?.lastUpdated ?? null,
-      nextRefresh: payload?.nextRefresh ?? null,
-      ageDays: payload?.ageDays ?? null,
-      cacheTtlDays: payload?.cacheTtlDays ?? null,
-      rows: [],
-      error: infoMessage || 'Ticker data unavailable'
-    };
-  }
-
-  const rows = Object.entries(series)
-    .map(([date, row]) => ({ date, close: Number(row['4. close']) }))
-    .filter((row) => Number.isFinite(row.close))
-    .sort((a, b) => a.date.localeCompare(b.date));
-
-  return {
-    symbol,
-    source: payload.source,
-    lastUpdated: payload.lastUpdated,
-    nextRefresh: payload.nextRefresh,
-    ageDays: payload.ageDays ?? null,
-    cacheTtlDays: payload.cacheTtlDays ?? null,
-    rows,
-    error: null
-  };
-};
-
-const buildTickerDataset = (tickerResults) => {
-  const valid = tickerResults.filter((result) => !result.error && result.rows.length >= 40);
-  if (valid.length < 2) {
-    return { error: 'Load at least two valid tickers with enough daily history to compute portfolio statistics.' };
-  }
-
-  const commonDates = valid
-    .map((result) => new Set(result.rows.map((row) => row.date)))
-    .reduce((acc, currentSet) => new Set([...acc].filter((date) => currentSet.has(date))));
-
-  const alignedDates = [...commonDates].sort();
-  if (alignedDates.length < 40) {
-    return { error: 'The loaded tickers do not share enough overlapping daily observations yet.' };
-  }
-
-  const logReturnsBySymbol = {};
-  const customAssetData = {};
-  const warningsBySymbol = {};
-  const symbols = valid.map((result) => result.symbol);
-
-  valid.forEach((result) => {
-    const byDate = new Map(result.rows.map((row) => [row.date, row.close]));
-    const prices = alignedDates.map((date) => byDate.get(date)).filter((value) => Number.isFinite(value));
-    if (prices.length !== alignedDates.length) return;
-
-    const simpleReturns = prices.slice(1).map((price, index) => price / prices[index] - 1);
-    const logReturns = prices.slice(1).map((price, index) => Math.log(price / prices[index]));
-    const annualizedReturn = Math.exp(average(logReturns) * 252) - 1;
-    const annualizedVol = stdDev(logReturns) * Math.sqrt(252);
-    const maxAbsDailyMove = Math.max(...simpleReturns.map((value) => Math.abs(value)));
-
-    logReturnsBySymbol[result.symbol] = logReturns;
-    customAssetData[result.symbol] = {
-      expectedReturn: annualizedReturn * 100,
-      annualizedReturn: annualizedReturn * 100,
-      volatility: annualizedVol * 100
-    };
-
-    if (maxAbsDailyMove > 0.3) {
-      warningsBySymbol[result.symbol] = 'Large raw-price move detected (>30% in one day). Free-tier close data is not split/dividend adjusted.';
-    }
-  });
-
-  const correlationMatrixForTickers = {};
-  symbols.forEach((leftSymbol) => {
-    correlationMatrixForTickers[leftSymbol] = {};
-    symbols.forEach((rightSymbol) => {
-      correlationMatrixForTickers[leftSymbol][rightSymbol] = leftSymbol === rightSymbol
-        ? 1
-        : pearsonCorrelation(logReturnsBySymbol[leftSymbol], logReturnsBySymbol[rightSymbol]);
-    });
-  });
-
-  return {
-    symbols,
-    assetData: customAssetData,
-    correlationMatrix: correlationMatrixForTickers,
-    warningsBySymbol,
-    observationCount: alignedDates.length,
-    windowStart: alignedDates[0],
-    windowEnd: alignedDates[alignedDates.length - 1],
-    methodLabel: 'Historical realized · log daily return × 252 · raw close prices'
-  };
-};
 
 const CloudDot = ({ cx, cy }) => (cx == null || cy == null ? null : <circle cx={cx} cy={cy} r={2.1} fill="#3b4a7a" opacity={0.45} />);
 const FrontierDot = ({ cx, cy }) => (cx == null || cy == null ? null : <circle cx={cx} cy={cy} r={3} fill="#34d399" stroke="#0b1020" strokeWidth={1} />);
@@ -316,7 +180,7 @@ const legendDefinitions = {
   finder: {
     dotClass: 'finder',
     label: 'Finder result',
-    financial: 'The finder result is the portfolio the app selected because it best matches your target, such as a required return or a maximum risk limit. In advisor and ticker modes, it is the recommended portfolio under those rules.',
+    financial: 'The finder result is the portfolio the app selected because it best matches your target, such as a required return or a maximum risk limit. In advisor mode, it is the recommended portfolio under those rules.',
     eli5: "This is the app saying, \"Based on what you asked for, pick this one.\" It is the closest match to the goal you typed in."
   },
   asset: {
@@ -400,61 +264,13 @@ const EfficientFrontierApp = () => {
   const [includeOnlyPublicMarkets, setIncludeOnlyPublicMarkets] = useState(false);
   const [excludeAlternatives, setExcludeAlternatives] = useState(false);
   const [requireBond, setRequireBond] = useState(false);
-
-  const [tickerInput, setTickerInput] = useState('AAPL, MSFT, JNJ');
-  const [loadedTickerSymbols, setLoadedTickerSymbols] = useState([]);
-  const [tickerMode, setTickerMode] = useState('requiredReturn');
-  const [tickerTarget, setTickerTarget] = useState('12.00');
-  const [tickerFetchState, setTickerFetchState] = useState({ status: 'idle', results: [], error: '' });
-  const [refreshingSymbols, setRefreshingSymbols] = useState([]);
   const [activeLegendKey, setActiveLegendKey] = useState('cloud');
 
   const parsedRiskFreeRate = Number(riskFreeRate);
   const riskFreeRateValue = Number.isFinite(parsedRiskFreeRate) ? parsedRiskFreeRate : defaultRiskFreeRate;
-  const parsedTickerInput = useMemo(() => parseTickerInput(tickerInput), [tickerInput]);
   const advisorMinAssets = Number.isFinite(minAssets) ? Math.max(2, Math.min(Math.floor(minAssets), advisorMaxAssets)) : 2;
   const advisorMaxWeight = Number.isFinite(maxWeight) ? Math.max(0.1, Math.min(maxWeight, 1)) : 0.3;
   const advisorMaxAverageCorrelation = diversificationThresholds[diversificationLevel] ?? diversificationThresholds.balanced;
-
-  useEffect(() => {
-    if (activeTab !== 'ticker' || loadedTickerSymbols.length === 0) return;
-    let cancelled = false;
-
-    const load = async () => {
-      setTickerFetchState((current) => ({ ...current, status: 'loading', error: '' }));
-      try {
-        const results = await Promise.all(
-          loadedTickerSymbols.map(async (symbol) => {
-            const response = await fetch(`/api/ticker/${symbol}`);
-            const payload = await response.json();
-            return normalizeTickerResponse(symbol, payload);
-          })
-        );
-        if (!cancelled) setTickerFetchState({ status: 'success', results, error: '' });
-      } catch {
-        if (!cancelled) setTickerFetchState({ status: 'error', results: [], error: 'Failed to load ticker data from the local backend.' });
-      }
-    };
-
-    load();
-    return () => { cancelled = true; };
-  }, [activeTab, loadedTickerSymbols]);
-
-  const refreshTicker = async (symbol) => {
-    setRefreshingSymbols((current) => [...new Set([...current, symbol])]);
-    try {
-      const response = await fetch(`/api/ticker/${symbol}/refresh`, { method: 'POST' });
-      const payload = await response.json();
-      const normalized = normalizeTickerResponse(symbol, payload);
-      setTickerFetchState((current) => ({
-        ...current,
-        status: 'success',
-        results: current.results.map((entry) => (entry.symbol === symbol ? normalized : entry))
-      }));
-    } finally {
-      setRefreshingSymbols((current) => current.filter((entry) => entry !== symbol));
-    }
-  };
 
   const handleAssetCountChange = (nextCount) => {
     const safeCount = Math.max(2, Math.min(10, nextCount));
@@ -527,25 +343,10 @@ const EfficientFrontierApp = () => {
   const advisorFinderResults = useMemo(() => findPrimaryPortfolio({ portfolios: advisorOptimizedSet.portfolios, mode: advisorMode, targetValue: advisorTarget }), [advisorMode, advisorOptimizedSet.portfolios, advisorTarget]);
   const advisorAlternatives = useMemo(() => findAlternatives({ primary: advisorFinderResults.primary, portfolios: advisorOptimizedSet.portfolios, tolerance: SAMPLING_TOLERANCE }), [advisorFinderResults.primary, advisorOptimizedSet.portfolios]);
 
-  const tickerDataset = useMemo(() => tickerFetchState.status === 'success' ? buildTickerDataset(tickerFetchState.results) : { error: null }, [tickerFetchState]);
-
-  const tickerOptimizedSet = useMemo(() => {
-    if (activeTab !== 'ticker') return emptyPortfolioSet('Ticker Lab', { activeAssets: loadedTickerSymbols });
-    if (tickerFetchState.status !== 'success' || tickerDataset.error || !tickerDataset.symbols) {
-      return emptyPortfolioSet('Ticker Lab', { activeAssets: loadedTickerSymbols, datasetError: tickerDataset.error ?? null });
-    }
-    const sampleCount = chooseSampleCount(tickerDataset.symbols.length);
-    const portfolios = generatePortfolioSet({ selectedAssets: tickerDataset.symbols, assetData: tickerDataset.assetData, correlationMatrix: tickerDataset.correlationMatrix, riskFreeRate: riskFreeRateValue, sampleCount });
-    return { modeLabel: 'Ticker Lab', activeAssets: tickerDataset.symbols, sampleCount, portfolios, observationCount: tickerDataset.observationCount, windowStart: tickerDataset.windowStart, windowEnd: tickerDataset.windowEnd, methodLabel: tickerDataset.methodLabel, warningsBySymbol: tickerDataset.warningsBySymbol, tickerAssetData: tickerDataset.assetData, ...summarizePortfolios(portfolios) };
-  }, [activeTab, loadedTickerSymbols, riskFreeRateValue, tickerDataset, tickerFetchState.status]);
-
-  const tickerFinderResults = useMemo(() => findPrimaryPortfolio({ portfolios: tickerOptimizedSet.portfolios, mode: tickerMode, targetValue: tickerTarget }), [tickerMode, tickerOptimizedSet.portfolios, tickerTarget]);
-  const tickerAlternatives = useMemo(() => findAlternatives({ primary: tickerFinderResults.primary, portfolios: tickerOptimizedSet.portfolios, tolerance: SAMPLING_TOLERANCE }), [tickerFinderResults.primary, tickerOptimizedSet.portfolios]);
-
-  const currentSet = activeTab === 'build' ? buildOptimizedSet : activeTab === 'advisor' ? advisorOptimizedSet : tickerOptimizedSet;
-  const currentFinderResults = activeTab === 'build' ? buildFinderResults : activeTab === 'advisor' ? advisorFinderResults : tickerFinderResults;
-  const currentAlternatives = activeTab === 'build' ? buildAlternatives : activeTab === 'advisor' ? advisorAlternatives : tickerAlternatives;
-  const currentFinderMode = activeTab === 'build' ? buildFinderMode : activeTab === 'advisor' ? advisorMode : tickerMode;
+  const currentSet = activeTab === 'build' ? buildOptimizedSet : advisorOptimizedSet;
+  const currentFinderResults = activeTab === 'build' ? buildFinderResults : advisorFinderResults;
+  const currentAlternatives = activeTab === 'build' ? buildAlternatives : advisorAlternatives;
+  const currentFinderMode = activeTab === 'build' ? buildFinderMode : advisorMode;
   const recommendation = currentFinderResults.primary;
   const primaryStatus = currentFinderResults.status;
   const isFeasible = primaryStatus === 'on-frontier';
@@ -555,14 +356,13 @@ const EfficientFrontierApp = () => {
   const frontierHigh = frontierReturns.length ? Math.max(...frontierReturns) : 0;
 
   const highlightedAssetNames = activeTab === 'build' ? currentSet.activeAssets : recommendation?.selectedAssets ?? ms?.selectedAssets ?? currentSet.activeAssets ?? [];
-  const highlightedAssets = highlightedAssetNames.map((name, index) => {
-    if (activeTab === 'ticker') {
-      const metrics = currentSet.tickerAssetData?.[name] ?? tickerDataset.assetData?.[name];
-      if (!metrics) return null;
-      return { name, return: metrics.expectedReturn, risk: metrics.volatility, label: name, color: slotColors[index % slotColors.length] };
-    }
-    return { name, return: getDisplayedReturn(name), risk: getDisplayedVolatility(name), label: name, color: slotColors[index % slotColors.length] };
-  }).filter(Boolean);
+  const highlightedAssets = highlightedAssetNames.map((name, index) => ({
+    name,
+    return: getDisplayedReturn(name),
+    risk: getDisplayedVolatility(name),
+    label: name,
+    color: slotColors[index % slotColors.length]
+  }));
 
   const basePoints = [...currentSet.portfolios, ...highlightedAssets.map((point) => ({ risk: point.risk, return: point.return })), { risk: 0, return: riskFreeRateValue }, ...(recommendation ? [recommendation] : [])];
   const xMax = Math.ceil((basePoints.length ? Math.max(...basePoints.map((point) => point.risk)) : 0) + 1);
@@ -570,7 +370,7 @@ const EfficientFrontierApp = () => {
   const allYs = [...basePoints.map((point) => point.return), ...capitalMarketLine.map((point) => point.return)];
   const yMin = Math.floor((allYs.length ? Math.min(...allYs) : 0) - 0.5);
   const yMax = Math.ceil((allYs.length ? Math.max(...allYs) : 0) + 0.5);
-  const recommendationPoint = recommendation ? [{ ...recommendation, label: isFeasible ? (activeTab === 'build' ? 'Finder result' : activeTab === 'advisor' ? 'Advisor recommendation' : 'Ticker recommendation') : 'Closest achievable' }] : [];
+  const recommendationPoint = recommendation ? [{ ...recommendation, label: isFeasible ? (activeTab === 'build' ? 'Finder result' : 'Advisor recommendation') : 'Closest achievable' }] : [];
 
   const feasibilityBadge = (() => {
     if (primaryStatus === 'no-target') {
@@ -615,8 +415,7 @@ const EfficientFrontierApp = () => {
     : advisorOptimizedSet.portfolios.length === 0
       ? 'Your current advisor constraints produced no candidate portfolios. Try loosening the diversification rules, lowering the minimum asset count, or raising the weight cap.'
       : 'No portfolios available for the current settings.';
-  const tickerStatusMessage = tickerFetchState.status === 'loading' ? 'Loading ticker data from your local backend…' : tickerFetchState.status === 'error' ? tickerFetchState.error : tickerDataset.error || '';
-  const finderLegendLabel = activeTab === 'build' ? 'Finder result' : activeTab === 'advisor' ? 'Advisor recommendation' : 'Ticker recommendation';
+  const finderLegendLabel = activeTab === 'build' ? 'Finder result' : 'Advisor recommendation';
   const activeLegendDefinition = useMemo(() => (
     activeLegendKey === 'finder'
       ? { ...legendDefinitions.finder, label: finderLegendLabel }
@@ -636,29 +435,28 @@ const EfficientFrontierApp = () => {
     <div className="app-shell">
       <div className="container">
         <div className="brand-row">
-          <div className="brand"><div className="brand-mark" /><div className="brand-text"><div className="brand-title">Portfolio Lab</div><div className="brand-sub">Dual-Mode Portfolio Advisor + Ticker Lab</div></div></div>
+          <div className="brand"><div className="brand-mark" /><div className="brand-text"><div className="brand-title">Portfolio Lab</div><div className="brand-sub">Build-your-own optimizer + advisor workflow</div></div></div>
           <div className="header-meta"><span className="header-dot" /><span>{datasetMetadata.datasetName} · {datasetMetadata.currency} · Vintage {datasetMetadata.assumptionVintage}</span></div>
         </div>
 
         <div className="hero">
           <div>
-            <h1 className="hero-title">Explore a <span className="accent">portfolio lab</span> three different ways.</h1>
-            <p className="hero-sub">Build your own asset basket, let the app choose from the LTCMA universe, or pull ticker history from your local backend and optimize custom stock portfolios from cached market data.</p>
+            <h1 className="hero-title">Explore a <span className="accent">portfolio lab</span> two different ways.</h1>
+            <p className="hero-sub">Build your own asset basket from the LTCMA assumptions, or let the app recommend portfolios from the broader investable universe under advisor-style constraints.</p>
           </div>
           <div className="kpi-grid">
-            <div className="kpi" style={{ '--kpi-accent': 'var(--accent-2)' }}><div className="kpi-label">Current mode</div><div className="kpi-value">{currentSet.modeLabel}</div><div className="kpi-delta">{activeTab === 'build' ? `${(currentSet.activeAssets ?? []).length} selected assets` : activeTab === 'advisor' ? `${advisorUniverse.length} assets in candidate universe` : `${(currentSet.activeAssets ?? loadedTickerSymbols).length} ticker slots`}</div></div>
+            <div className="kpi" style={{ '--kpi-accent': 'var(--accent-2)' }}><div className="kpi-label">Current mode</div><div className="kpi-value">{currentSet.modeLabel}</div><div className="kpi-delta">{activeTab === 'build' ? `${(currentSet.activeAssets ?? []).length} selected assets` : `${advisorUniverse.length} assets in candidate universe`}</div></div>
             <div className="kpi" style={{ '--kpi-accent': 'var(--accent-3)' }}><div className="kpi-label">Sampled portfolios</div><div className="kpi-value">{currentSet.portfolios.length}</div><div className="kpi-delta">Monte Carlo + anchors</div></div>
             <div className="kpi" style={{ '--kpi-accent': 'var(--accent)' }}><div className="kpi-label">Estimated frontier range</div><div className="kpi-value">{frontierReturns.length ? `${fmtPct(frontierLow, 1)} – ${fmtPct(frontierHigh, 1)}` : '—'}</div><div className="kpi-delta">sampled upper envelope · not exact QP</div></div>
           </div>
         </div>
 
         <div className="panel">
-          <div className="panel-header"><h2 className="panel-title">Choose your workflow</h2><div className="header-meta" style={{ fontSize: 10 }}>manual universe control, advisor-led selection, or backend-powered ticker analytics</div></div>
+          <div className="panel-header"><h2 className="panel-title">Choose your workflow</h2><div className="header-meta" style={{ fontSize: 10 }}>manual universe control or advisor-led selection</div></div>
           <div className="toolbar-row">
             <div className="tab-switch">
               <button className={`tab-button ${activeTab === 'build' ? 'active' : ''}`} onClick={() => setActiveTab('build')}>Build My Own</button>
               <button className={`tab-button ${activeTab === 'advisor' ? 'active' : ''}`} onClick={() => setActiveTab('advisor')}>Choose for Me</button>
-              <button className={`tab-button ${activeTab === 'ticker' ? 'active' : ''}`} onClick={() => setActiveTab('ticker')}>Ticker Lab</button>
             </div>
             <div className="rf-card compact"><div className="asset-label">Risk-free rate</div><div className="rf-input-row"><input className="rf-input" type="number" step="0.01" min="0" max="15" value={riskFreeRate} onChange={(e) => setRiskFreeRate(e.target.value)} /><span className="rf-suffix">%</span></div><div className="rf-hint">Global across all tabs · default U.S. Cash {defaultRiskFreeRate.toFixed(2)}% · optimizer uses arithmetic 2026 returns when available</div></div>
           </div>
@@ -684,7 +482,7 @@ const EfficientFrontierApp = () => {
               <div className="panel recommendation-panel"><div className="panel-header"><h2 className="panel-title">Suggested portfolio</h2><div className={`feasibility-badge feasibility-${feasibilityBadge.kind}`}>{feasibilityBadge.short}</div></div>{recommendation ? <><div className="feasibility-detail">{feasibilityBadge.detail}</div><div className="donut-wrap"><Donut segments={donutSegments(recommendation)} centerTop={buildFinderMode === 'requiredReturn' ? fmtPct(recommendation.risk, 1) : fmtPct(recommendation.return, 1)} centerBottom={buildFinderMode === 'requiredReturn' ? 'RISK' : 'RETURN'} /><div className="donut-legend">{recommendation.selectedAssets.map((name, index) => <div className="donut-legend-row" key={name}><span className="legend-swatch" style={{ background: slotColors[index % slotColors.length] }} /><span className="name">{name}</span><span className="pct">{recommendation.weightPct[index]}%</span></div>)}</div></div><div className="insight-metrics"><div className="stat"><span className="stat-label">Return</span><span className="stat-value">{fmtPct(recommendation.return)}</span></div><div className="stat"><span className="stat-label">Risk</span><span className="stat-value">{fmtPct(recommendation.risk)}</span></div><div className="stat"><span className="stat-label">Sharpe</span><span className="stat-value">{Number.isFinite(recommendation.sharpe) ? fmtNum(recommendation.sharpe) : '—'}</span></div></div></> : <div className="empty-state">Enter a target to evaluate candidate portfolios.</div>}</div>
             </div>
           </>
-        ) : activeTab === 'advisor' ? (
+        ) : (
           <div className="finder-grid">
             <div className="panel finder-panel">
               <div className="panel-header"><h2 className="panel-title">Advisor constraints</h2><div className={`feasibility-badge feasibility-${feasibilityBadge.kind}`}>{feasibilityBadge.short}</div></div>
@@ -713,42 +511,11 @@ const EfficientFrontierApp = () => {
             </div>
             <div className="panel recommendation-panel"><div className="panel-header"><h2 className="panel-title">Advisor recommendation</h2><div className={`feasibility-badge feasibility-${feasibilityBadge.kind}`}>{feasibilityBadge.short}</div></div>{recommendation ? <><div className="feasibility-detail">{feasibilityBadge.detail}</div><div className="donut-wrap"><Donut segments={donutSegments(recommendation)} centerTop={advisorMode === 'requiredReturn' ? fmtPct(recommendation.risk, 1) : fmtPct(recommendation.return, 1)} centerBottom={advisorMode === 'requiredReturn' ? 'RISK' : 'RETURN'} /><div className="donut-legend">{recommendation.selectedAssets.map((name, index) => <div className="donut-legend-row" key={name}><span className="legend-swatch" style={{ background: slotColors[index % slotColors.length] }} /><span className="name">{name}</span><span className="pct">{recommendation.weightPct[index]}%</span></div>)}</div></div><div className="insight-metrics"><div className="stat"><span className="stat-label">Return</span><span className="stat-value">{fmtPct(recommendation.return)}</span></div><div className="stat"><span className="stat-label">Risk</span><span className="stat-value">{fmtPct(recommendation.risk)}</span></div><div className="stat"><span className="stat-label">Sharpe</span><span className="stat-value">{Number.isFinite(recommendation.sharpe) ? fmtNum(recommendation.sharpe) : '—'}</span></div><div className="stat"><span className="stat-label">Avg corr</span><span className="stat-value">{Number.isFinite(recommendation.avgCorrelation) ? fmtNum(recommendation.avgCorrelation, 2) : '—'}</span></div><div className="stat"><span className="stat-label">Div ratio</span><span className="stat-value">{Number.isFinite(recommendation.diversificationRatio) ? fmtNum(recommendation.diversificationRatio, 2) : '—'}</span></div></div></> : <div className="empty-state">{advisorEmptyMessage}</div>}</div>
           </div>
-        ) : (
-          <>
-            <div className="panel">
-              <div className="panel-header"><h2 className="panel-title">Ticker input</h2><div className="header-meta" style={{ fontSize: 10 }}>up to 10 comma-separated symbols · explicit load to protect the daily quota</div></div>
-              <div className="finder-input-row advisor-grid">
-                <div className="rf-card compact full-width"><div className="asset-label">Tickers</div><div className="rf-input-row"><input className="rf-input" style={{ width: '100%' }} type="text" value={tickerInput} onChange={(event) => setTickerInput(event.target.value)} /></div><div className="rf-hint">Examples: AAPL, MSFT, JNJ. Parsed symbols: {parsedTickerInput.join(', ') || '—'}.</div></div>
-                <div className="count-stepper compact-stepper"><span className="asset-label">Load tickers</span><button className="mode-button active" onClick={() => setLoadedTickerSymbols(parsedTickerInput)} disabled={parsedTickerInput.length < 2}>Load tickers</button><div className="rf-hint">Historical realized metrics from raw close prices. Compact free-tier history is about 100 trading days.</div></div>
-              </div>
-              <div className="finder-summary"><div className="summary-chip">Loaded set {loadedTickerSymbols.length ? loadedTickerSymbols.join(', ') : 'none loaded yet'}</div><div className="summary-chip">Status {tickerFetchState.status}</div>{tickerDataset.observationCount ? <div className="summary-chip">{tickerDataset.observationCount} overlapping daily observations</div> : null}{tickerDataset.methodLabel ? <div className="summary-chip">{tickerDataset.methodLabel}</div> : null}</div>
-            </div>
-            <div className="panel">
-              <div className="panel-header"><h2 className="panel-title">Ticker data</h2><div className="header-meta" style={{ fontSize: 10 }}>{tickerDataset.windowStart && tickerDataset.windowEnd ? `${tickerDataset.windowStart} → ${tickerDataset.windowEnd}` : 'waiting for backend data'}</div></div>
-              {tickerStatusMessage ? <div className="empty-state">{tickerStatusMessage}</div> : null}
-              <div className="dynamic-asset-grid">
-                {tickerFetchState.results.map((result, index) => (
-                  <div key={result.symbol} className="asset-card" data-slot={index % slotColors.length} title={result.nextRefresh ? `Last updated ${result.lastUpdated}. Next refresh ${result.nextRefresh}.` : undefined}>
-                    <span className="slot-pill">{result.symbol}</span>
-                    <div className="asset-label">{result.error ? 'Load issue' : result.source === 'cache' ? 'Cached market data' : 'Fresh market data'}</div>
-                    <div className="asset-stats"><div className="stat"><span className="stat-label">Return</span><span className="stat-value">{tickerDataset.assetData?.[result.symbol] ? fmtPct(tickerDataset.assetData[result.symbol].expectedReturn) : '—'}</span></div><div className="stat"><span className="stat-label">Vol</span><span className="stat-value">{tickerDataset.assetData?.[result.symbol] ? fmtPct(tickerDataset.assetData[result.symbol].volatility) : '—'}</span></div></div>
-                    <div className="rf-hint">{result.error ? result.error : `Age ${typeof result.ageDays === 'number' ? fmtDays(result.ageDays) : '—'} · refresh due ${result.nextRefresh}`}</div>
-                    {tickerDataset.warningsBySymbol?.[result.symbol] ? <div className="rf-hint">⚠️ {tickerDataset.warningsBySymbol[result.symbol]}</div> : null}
-                    <button className="mode-button" onClick={() => refreshTicker(result.symbol)} disabled={refreshingSymbols.includes(result.symbol)}>{refreshingSymbols.includes(result.symbol) ? 'Refreshing…' : 'Refresh ticker'}</button>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="finder-grid">
-              <div className="panel finder-panel"><div className="panel-header"><h2 className="panel-title">Ticker optimizer</h2><div className={`feasibility-badge feasibility-${feasibilityBadge.kind}`}>{feasibilityBadge.short}</div></div><div className="mode-toggle"><button className={`mode-button ${tickerMode === 'requiredReturn' ? 'active' : ''}`} onClick={() => setTickerMode('requiredReturn')}>Required return</button><button className={`mode-button ${tickerMode === 'maxRisk' ? 'active' : ''}`} onClick={() => setTickerMode('maxRisk')}>Maximum risk</button></div><div className="finder-input-row"><div className="rf-card compact full-width"><div className="asset-label">{tickerMode === 'requiredReturn' ? 'Target return' : 'Risk ceiling'}</div><div className="rf-input-row"><input className="rf-input" type="number" step="0.10" value={tickerTarget} onChange={(event) => setTickerTarget(event.target.value)} /><span className="rf-suffix">%</span></div><div className="rf-hint">Historical realized inputs only. These are not forward-looking J.P. Morgan capital market assumptions.</div></div></div></div>
-              <div className="panel recommendation-panel"><div className="panel-header"><h2 className="panel-title">Ticker recommendation</h2><div className={`feasibility-badge feasibility-${feasibilityBadge.kind}`}>{feasibilityBadge.short}</div></div>{recommendation ? <><div className="feasibility-detail">{feasibilityBadge.detail}</div><div className="donut-wrap"><Donut segments={donutSegments(recommendation)} centerTop={tickerMode === 'requiredReturn' ? fmtPct(recommendation.risk, 1) : fmtPct(recommendation.return, 1)} centerBottom={tickerMode === 'requiredReturn' ? 'RISK' : 'RETURN'} /><div className="donut-legend">{recommendation.selectedAssets.map((name, index) => <div className="donut-legend-row" key={name}><span className="legend-swatch" style={{ background: slotColors[index % slotColors.length] }} /><span className="name">{name}</span><span className="pct">{recommendation.weightPct[index]}%</span></div>)}</div></div><div className="insight-metrics"><div className="stat"><span className="stat-label">Return</span><span className="stat-value">{fmtPct(recommendation.return)}</span></div><div className="stat"><span className="stat-label">Risk</span><span className="stat-value">{fmtPct(recommendation.risk)}</span></div><div className="stat"><span className="stat-label">Sharpe</span><span className="stat-value">{Number.isFinite(recommendation.sharpe) ? fmtNum(recommendation.sharpe) : '—'}</span></div></div></> : <div className="empty-state">{tickerStatusMessage || 'Load at least two valid tickers to compute a custom frontier.'}</div>}</div>
-            </div>
-          </>
         )}
 
         <div className="chart-panel">
           <div className="chart-header">
-            <div><h2 className="panel-title">{activeTab === 'build' ? 'Estimated frontier + finder result' : activeTab === 'advisor' ? 'Advisor search + recommendation' : 'Ticker frontier + recommendation'}</h2><div className="header-meta" style={{ fontSize: 10, marginTop: 8 }}>{activeTab === 'ticker' ? 'historical realized · compact ~100-day window · raw close prices (non-adjusted)' : activeTab === 'advisor' ? 'sampled portfolios with diversification constraints for more realistic recommendations' : 'sampled Monte Carlo upper envelope for client-side interactivity'}</div></div>
+            <div><h2 className="panel-title">{activeTab === 'build' ? 'Estimated frontier + finder result' : 'Advisor search + recommendation'}</h2><div className="header-meta" style={{ fontSize: 10, marginTop: 8 }}>{activeTab === 'advisor' ? 'sampled portfolios with diversification constraints for more realistic recommendations' : 'sampled Monte Carlo upper envelope for client-side interactivity'}</div></div>
             <div className="chart-legend">
               {chartLegendItems.map((item) => (
                 <button
@@ -796,7 +563,7 @@ const EfficientFrontierApp = () => {
               <Scatter name="Risk-free rate" data={capitalMarketLine.slice(0, 1)} shape={<RiskFreeShape />} />
               <Scatter name="Minimum variance" data={currentSet.minVariance} shape={<MinVarShape />} />
               <Scatter name="Maximum Sharpe" data={currentSet.maxSharpe} shape={<SharpeShape />} />
-              <Scatter name={activeTab === 'build' ? 'Finder result' : activeTab === 'advisor' ? 'Advisor recommendation' : 'Ticker recommendation'} data={recommendationPoint} shape={<FinderShape />} />
+              <Scatter name={activeTab === 'build' ? 'Finder result' : 'Advisor recommendation'} data={recommendationPoint} shape={<FinderShape />} />
               <Scatter name="Active assets" data={highlightedAssets} shape={<SelectedAssetShape />} />
             </ScatterChart>
           </ResponsiveContainer>
@@ -818,7 +585,7 @@ const EfficientFrontierApp = () => {
           </details>
         ) : null}
 
-        <div className="footer">Source · {datasetMetadata.datasetName} · plus backend-fetched ticker history for Ticker Lab · sampled optimization for client-side interactivity</div>
+        <div className="footer">Source · {datasetMetadata.datasetName} · sampled optimization for client-side interactivity</div>
       </div>
     </div>
   );
