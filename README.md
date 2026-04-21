@@ -2,6 +2,12 @@
 
 A React-based application for visualizing portfolio optimization using Modern Portfolio Theory.
 
+## Live App
+
+Use the hosted version here:
+
+- [https://frontier.madsen7.com](https://frontier.madsen7.com)
+
 ## New: Ticker Mode (Backend Required)
 
 This project includes a **secure backend proxy** for market data.
