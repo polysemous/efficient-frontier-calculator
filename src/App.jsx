@@ -471,6 +471,7 @@ const EfficientFrontierApp = () => {
   const currentSet = activeTab === 'build' ? buildOptimizedSet : advisorOptimizedSet;
   const currentAlternatives = activeTab === 'build' ? [] : advisorAlternatives;
   const recommendation = activeTab === 'build' ? buildSelectedPortfolio : advisorFinderResults.primary;
+  const buildReferencePortfolio = ms ?? buildSelectedPortfolio;
   const primaryStatus = activeTab === 'build' ? 'selected' : advisorFinderResults.status;
   const isFeasible = activeTab === 'build' ? Boolean(buildSelectedPortfolio) : primaryStatus === 'on-frontier';
   const ms = currentSet.maxSharpe[0];
@@ -672,20 +673,20 @@ const EfficientFrontierApp = () => {
                 </div>
               </div>
               <div className="panel recommendation-panel">
-                <div className="panel-header"><h2 className="panel-title">Selected portfolio</h2><div className={`feasibility-badge feasibility-${feasibilityBadge.kind}`}>{feasibilityBadge.short}</div></div>
-                {recommendation ? (
+                <div className="panel-header"><h2 className="panel-title">Maximum Sharpe portfolio</h2><div className="feasibility-badge feasibility-success">reference mix</div></div>
+                {buildReferencePortfolio ? (
                   <>
-                    <div className="feasibility-detail">Drag the chart marker up or down the frontier to inspect different portfolio mixes from this basket.</div>
+                    <div className="feasibility-detail">This is the highest risk-adjusted portfolio the app found for your chosen asset basket. Use the chart marker to compare it with other points on the frontier.</div>
                     <div className="donut-wrap">
-                      <Donut segments={donutSegments(recommendation)} centerTop={fmtPct(recommendation.return, 1)} centerBottom="RETURN" />
-                      <div className="donut-legend">{recommendation.selectedAssets.map((name, index) => <div className="donut-legend-row" key={name}><span className="legend-swatch" style={{ background: slotColors[index % slotColors.length] }} /><span className="name">{name}</span><span className="pct">{recommendation.weightPct[index]}%</span></div>)}</div>
+                      <Donut segments={donutSegments(buildReferencePortfolio)} centerTop={fmtNum(buildReferencePortfolio.sharpe)} centerBottom="SHARPE" />
+                      <div className="donut-legend">{buildReferencePortfolio.selectedAssets.map((name, index) => <div className="donut-legend-row" key={name}><span className="legend-swatch" style={{ background: slotColors[index % slotColors.length] }} /><span className="name">{name}</span><span className="pct">{buildReferencePortfolio.weightPct[index]}%</span></div>)}</div>
                     </div>
                     <div className="insight-metrics">
-                      <div className="stat"><span className="stat-label">Return</span><span className="stat-value">{fmtPct(recommendation.return)}</span></div>
-                      <div className="stat"><span className="stat-label">Risk</span><span className="stat-value">{fmtPct(recommendation.risk)}</span></div>
-                      <div className="stat"><span className="stat-label">Sharpe</span><span className="stat-value">{Number.isFinite(recommendation.sharpe) ? fmtNum(recommendation.sharpe) : '—'}</span></div>
-                      <div className="stat"><span className="stat-label">Avg corr</span><span className="stat-value">{Number.isFinite(recommendation.avgCorrelation) ? fmtNum(recommendation.avgCorrelation, 2) : '—'}</span></div>
-                      <div className="stat"><span className="stat-label">Div ratio</span><span className="stat-value">{Number.isFinite(recommendation.diversificationRatio) ? fmtNum(recommendation.diversificationRatio, 2) : '—'}</span></div>
+                      <div className="stat"><span className="stat-label">Return</span><span className="stat-value">{fmtPct(buildReferencePortfolio.return)}</span></div>
+                      <div className="stat"><span className="stat-label">Risk</span><span className="stat-value">{fmtPct(buildReferencePortfolio.risk)}</span></div>
+                      <div className="stat"><span className="stat-label">Sharpe</span><span className="stat-value">{Number.isFinite(buildReferencePortfolio.sharpe) ? fmtNum(buildReferencePortfolio.sharpe) : '—'}</span></div>
+                      <div className="stat"><span className="stat-label">Avg corr</span><span className="stat-value">{Number.isFinite(buildReferencePortfolio.avgCorrelation) ? fmtNum(buildReferencePortfolio.avgCorrelation, 2) : '—'}</span></div>
+                      <div className="stat"><span className="stat-label">Div ratio</span><span className="stat-value">{Number.isFinite(buildReferencePortfolio.diversificationRatio) ? fmtNum(buildReferencePortfolio.diversificationRatio, 2) : '—'}</span></div>
                     </div>
                   </>
                 ) : <div className="empty-state">Select at least two assets to generate an efficient frontier.</div>}
@@ -726,40 +727,25 @@ const EfficientFrontierApp = () => {
         <div className="chart-panel">
           <div className="chart-header">
             <div><h2 className="panel-title">{activeTab === 'build' ? 'Estimated frontier + selected portfolio' : 'Advisor search + recommendation'}</h2><div className="header-meta" style={{ fontSize: 10, marginTop: 8 }}>{activeTab === 'advisor' ? 'sampled portfolios with diversification constraints for more realistic recommendations' : 'sampled Monte Carlo upper envelope for client-side interactivity · drag the highlighted point along the frontier'}</div></div>
-            <div className="chart-legend">
-              {chartLegendItems.map((item) => (
-                <button
-                  key={item.dotClass}
-                  type="button"
-                  className="legend-item legend-button"
-                  onClick={() => setActiveLegendKey(item.dotClass)}
-                  aria-pressed={activeLegendKey === item.dotClass}
-                >
-                  <span className={`legend-dot ${item.dotClass}`} />
-                  <span>{item.label}</span>
-                </button>
-              ))}
-            </div>
           </div>
-          <div className="legend-explainer" role="status" aria-live="polite">
-            <div className="legend-explainer-header">
-              <span className={`legend-dot ${activeLegendDefinition.dotClass}`} />
-              <div>
-                <div className="legend-explainer-label">{activeLegendDefinition.label}</div>
-                <div className="legend-explainer-hint">Tap any legend item to switch explanations. Hover a chart point for its numeric detail.</div>
+          {activeTab === 'build' && buildSelectedPortfolio ? (
+            <div className="chart-inset">
+              <div className="chart-inset-title">Selected portfolio</div>
+              <div className="chart-inset-metrics">
+                <div className="chart-inset-metric"><span>Selected Risk</span><strong>{fmtPct(buildSelectedPortfolio.risk, 1)}</strong></div>
+                <div className="chart-inset-metric"><span>Selected Return</span><strong>{fmtPct(buildSelectedPortfolio.return, 1)}</strong></div>
+              </div>
+              <div className="chart-inset-mix">
+                {buildSelectedPortfolio.selectedAssets.map((name, index) => (
+                  <div className="chart-inset-mix-row" key={name}>
+                    <span className="legend-swatch" style={{ background: slotColors[index % slotColors.length] }} />
+                    <span className="name">{name}</span>
+                    <span className="pct">{buildSelectedPortfolio.weightPct[index]}%</span>
+                  </div>
+                ))}
               </div>
             </div>
-            <div className="legend-explainer-grid">
-              <div className="legend-explainer-card">
-                <div className="legend-explainer-title">Technical</div>
-                <p>{activeLegendDefinition.financial}</p>
-              </div>
-              <div className="legend-explainer-card">
-                <div className="legend-explainer-title">ELI5</div>
-                <p>{activeLegendDefinition.eli5}</p>
-              </div>
-            </div>
-          </div>
+          ) : null}
           <ResponsiveContainer width="100%" height={520}>
             <ScatterChart margin={{ top: 20, right: 30, bottom: 50, left: 50 }}>
               <defs><linearGradient id="frontierLine" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#22d3ee" /><stop offset="55%" stopColor="#34d399" /><stop offset="100%" stopColor="#f4c35a" /></linearGradient><linearGradient id="cmlLine" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#f5f7ff" /><stop offset="100%" stopColor="#f4c35a" /></linearGradient></defs>
@@ -796,6 +782,39 @@ const EfficientFrontierApp = () => {
               <Scatter name="Active assets" data={highlightedAssets} shape={<SelectedAssetShape />} />
             </ScatterChart>
           </ResponsiveContainer>
+          <div className="chart-legend">
+            {chartLegendItems.map((item) => (
+              <button
+                key={item.dotClass}
+                type="button"
+                className="legend-item legend-button"
+                onClick={() => setActiveLegendKey(item.dotClass)}
+                aria-pressed={activeLegendKey === item.dotClass}
+              >
+                <span className={`legend-dot ${item.dotClass}`} />
+                <span>{item.label}</span>
+              </button>
+            ))}
+          </div>
+          <div className="legend-explainer" role="status" aria-live="polite">
+            <div className="legend-explainer-header">
+              <span className={`legend-dot ${activeLegendDefinition.dotClass}`} />
+              <div>
+                <div className="legend-explainer-label">{activeLegendDefinition.label}</div>
+                <div className="legend-explainer-hint">Tap any legend item to switch explanations. Hover a chart point for its numeric detail.</div>
+              </div>
+            </div>
+            <div className="legend-explainer-grid">
+              <div className="legend-explainer-card">
+                <div className="legend-explainer-title">Technical</div>
+                <p>{activeLegendDefinition.financial}</p>
+              </div>
+              <div className="legend-explainer-card">
+                <div className="legend-explainer-title">ELI5</div>
+                <p>{activeLegendDefinition.eli5}</p>
+              </div>
+            </div>
+          </div>
         </div>
 
         {activeTab === 'advisor' && isFeasible && recommendation && currentAlternatives.length > 0 ? (
