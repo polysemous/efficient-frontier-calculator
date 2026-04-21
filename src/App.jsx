@@ -633,14 +633,14 @@ const EfficientFrontierApp = () => {
                 {buildSelectedPortfolio ? (
                   <>
                     <div className="feasibility-detail">Drag the chart marker along the frontier to inspect different return, risk, and allocation mixes from your chosen basket.</div>
+                    <div className="donut-wrap">
+                      <Donut segments={donutSegments(buildSelectedPortfolio)} centerTop={fmtPct(buildSelectedPortfolio.return, 1)} centerBottom="RETURN" />
+                      <div className="donut-legend">{buildSelectedPortfolio.selectedAssets.map((name, index) => <div className="donut-legend-row" key={name}><span className="legend-swatch" style={{ background: slotColors[index % slotColors.length] }} /><span className="name">{name}</span><span className="pct">{buildSelectedPortfolio.weightPct[index]}%</span></div>)}</div>
+                    </div>
                     <div className="insight-metrics">
                       <div className="stat"><span className="stat-label">Selected return</span><span className="stat-value">{fmtPct(buildSelectedPortfolio.return, 1)}</span></div>
                       <div className="stat"><span className="stat-label">Selected risk</span><span className="stat-value">{fmtPct(buildSelectedPortfolio.risk, 1)}</span></div>
                       <div className="stat"><span className="stat-label">Sharpe</span><span className="stat-value">{Number.isFinite(buildSelectedPortfolio.sharpe) ? fmtNum(buildSelectedPortfolio.sharpe) : '—'}</span></div>
-                    </div>
-                    <div className="donut-wrap">
-                      <Donut segments={donutSegments(buildSelectedPortfolio)} centerTop={fmtPct(buildSelectedPortfolio.return, 1)} centerBottom="RETURN" />
-                      <div className="donut-legend">{buildSelectedPortfolio.selectedAssets.map((name, index) => <div className="donut-legend-row" key={name}><span className="legend-swatch" style={{ background: slotColors[index % slotColors.length] }} /><span className="name">{name}</span><span className="pct">{buildSelectedPortfolio.weightPct[index]}%</span></div>)}</div>
                     </div>
                   </>
                 ) : <div className="empty-state">Select at least two assets to generate an efficient frontier.</div>}
@@ -651,7 +651,7 @@ const EfficientFrontierApp = () => {
                   <>
                     <div className="feasibility-detail">This is the highest risk-adjusted portfolio the app found for your chosen asset basket. Use the chart marker to compare it with other points on the frontier.</div>
                     <div className="donut-wrap">
-                      <Donut segments={donutSegments(buildReferencePortfolio)} centerTop={fmtNum(buildReferencePortfolio.sharpe)} centerBottom="SHARPE" />
+                      <Donut segments={donutSegments(buildReferencePortfolio)} centerTop={fmtPct(buildReferencePortfolio.return, 1)} centerBottom="RETURN" />
                       <div className="donut-legend">{buildReferencePortfolio.selectedAssets.map((name, index) => <div className="donut-legend-row" key={name}><span className="legend-swatch" style={{ background: slotColors[index % slotColors.length] }} /><span className="name">{name}</span><span className="pct">{buildReferencePortfolio.weightPct[index]}%</span></div>)}</div>
                     </div>
                     <div className="insight-metrics">
