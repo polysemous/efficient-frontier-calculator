@@ -17,6 +17,19 @@ The app now focuses on two workflows:
 
 Both workflows work entirely in the frontend using the built-in LTCMA dataset.
 
+## About This App
+
+This app is a hands-on way to explore Modern Portfolio Theory (MPT), which focuses on building portfolios that balance expected return and risk through diversification rather than evaluating assets one by one.
+
+It also reflects ideas associated with William F. Sharpe, including risk-adjusted return. Sharpe is known for the Sharpe ratio and shared the 1990 Sveriges Riksbank Prize in Economic Sciences in Memory of Alfred Nobel for pioneering work in financial economics.
+
+The efficient frontier is the set of portfolios that offers the best expected return for each level of risk. This app helps users visualize that frontier, compare portfolio mixes, and see how changing assets or assumptions affects portfolio outcomes.
+
+Useful references:
+
+- William F. Sharpe Nobel biography: https://www.nobelprize.org/prizes/economic-sciences/1990/sharpe/facts/
+- 1990 Nobel economics prize summary: https://www.nobelprize.org/prizes/economic-sciences/1990/summary/
+
 ## Setup
 
 ### 1. Install dependencies
