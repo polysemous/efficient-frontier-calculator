@@ -594,21 +594,11 @@ const EfficientFrontierApp = () => {
             <h1 className="hero-title">Explore a <span className="accent">portfolio lab</span> two different ways.</h1>
             <p className="hero-sub">Build your own asset basket from the LTCMA assumptions, or let the app recommend portfolios from the broader investable universe under advisor-style constraints.</p>
           </div>
-          <div className="kpi-grid">
-            <div className="kpi" style={{ '--kpi-accent': 'var(--accent-2)' }}><div className="kpi-label">Current mode</div><div className="kpi-value">{currentSet.modeLabel}</div><div className="kpi-delta">{activeTab === 'build' ? `${(currentSet.activeAssets ?? []).length} selected assets` : `${advisorUniverse.length} assets in candidate universe`}</div></div>
-            <div className="kpi" style={{ '--kpi-accent': 'var(--accent-3)' }}><div className="kpi-label">Sampled portfolios</div><div className="kpi-value">{currentSet.portfolios.length}</div><div className="kpi-delta">Monte Carlo + anchors</div></div>
-            <div className="kpi" style={{ '--kpi-accent': 'var(--accent)' }}><div className="kpi-label">Estimated frontier range</div><div className="kpi-value">{frontierReturns.length ? `${fmtPct(frontierLow, 1)} – ${fmtPct(frontierHigh, 1)}` : '—'}</div><div className="kpi-delta">sampled upper envelope · not exact QP</div></div>
-          </div>
-        </div>
-
-        <div className="panel">
-          <div className="panel-header"><h2 className="panel-title">Choose your workflow</h2><div className="header-meta" style={{ fontSize: 10 }}>manual universe control or advisor-led selection</div></div>
-          <div className="toolbar-row">
+          <div className="hero-toggle-row">
             <div className="tab-switch">
               <button className={`tab-button ${activeTab === 'build' ? 'active' : ''}`} onClick={() => setActiveTab('build')}>Build My Own</button>
               <button className={`tab-button ${activeTab === 'advisor' ? 'active' : ''}`} onClick={() => setActiveTab('advisor')}>Choose for Me</button>
             </div>
-            <div className="rf-card compact"><div className="asset-label">Risk-free rate</div><div className="rf-input-row"><input className="rf-input" type="number" step="0.01" min="0" max="15" value={riskFreeRate} onChange={(e) => setRiskFreeRate(e.target.value)} /><span className="rf-suffix">%</span></div><div className="rf-hint">Global across all tabs · default U.S. Cash {defaultRiskFreeRate.toFixed(2)}% · optimizer uses arithmetic 2026 returns when available</div></div>
           </div>
         </div>
 
@@ -616,7 +606,12 @@ const EfficientFrontierApp = () => {
           <>
             <div className="panel">
               <div className="panel-header"><h2 className="panel-title">Asset universe</h2><div className="header-meta" style={{ fontSize: 10 }}>dynamic selectors · swap duplicates by re-selecting · reference assets excluded</div></div>
-              <div className="toolbar-row"><div className="count-stepper"><span className="asset-label">Assets to include</span><div className="stepper-controls"><button className="stepper-button" aria-label="Decrease asset count" onClick={() => handleAssetCountChange(assetCount - 1)} disabled={assetCount <= 2}>−</button><span className="stepper-value">{assetCount}</span><button className="stepper-button" aria-label="Increase asset count" onClick={() => handleAssetCountChange(assetCount + 1)} disabled={assetCount >= 10}>+</button></div></div></div>
+              <div className="toolbar-row">
+                <div className="count-stepper"><span className="asset-label">Assets to include</span><div className="stepper-controls"><button className="stepper-button" aria-label="Decrease asset count" onClick={() => handleAssetCountChange(assetCount - 1)} disabled={assetCount <= 2}>−</button><span className="stepper-value">{assetCount}</span><button className="stepper-button" aria-label="Increase asset count" onClick={() => handleAssetCountChange(assetCount + 1)} disabled={assetCount >= 10}>+</button></div></div>
+                <div className="rf-card compact"><div className="asset-label">Risk-free rate</div><div className="rf-input-row"><input className="rf-input" type="number" step="0.01" min="0" max="15" value={riskFreeRate} onChange={(e) => setRiskFreeRate(e.target.value)} /><span className="rf-suffix">%</span></div><div className="rf-hint">U.S. Cash {defaultRiskFreeRate.toFixed(2)}%</div></div>
+                <div className="kpi" style={{ '--kpi-accent': 'var(--accent)' }}><div className="kpi-label">Frontier range</div><div className="kpi-value">{frontierReturns.length ? `${fmtPct(frontierLow, 1)} – ${fmtPct(frontierHigh, 1)}` : '—'}</div><div className="kpi-delta">sampled upper envelope · not exact QP</div></div>
+                <div className="kpi" style={{ '--kpi-accent': 'var(--accent-3)' }}><div className="kpi-label">Sampled portfolios</div><div className="kpi-value">{currentSet.portfolios.length}</div><div className="kpi-delta">Monte Carlo + anchors</div></div>
+              </div>
               <div className="dynamic-asset-grid">
                 {(currentSet.activeAssets ?? []).map((assetName, index) => (
                   <div key={index} className="asset-card" data-slot={index % slotColors.length}>

@@ -79,11 +79,11 @@ html, body {
 .header-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent); animation: pulse 2.4s ease-in-out infinite; }
 @keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.55; transform: scale(0.85); } }
 
-.hero { display: grid; grid-template-columns: 1.2fr 1fr; gap: 40px; align-items: end; margin-bottom: 28px; }
-@media (max-width: 900px) { .hero { grid-template-columns: 1fr; gap: 28px; } }
+.hero { margin-bottom: 28px; }
 .hero-title { font-family: var(--font-display); font-weight: 600; font-size: clamp(36px, 5vw, 56px); line-height: 1.02; letter-spacing: -0.025em; color: var(--text-0); margin: 0 0 14px; }
 .hero-title .accent { background: linear-gradient(90deg, #34d399 0%, #22d3ee 55%, #f4c35a 100%); -webkit-background-clip: text; background-clip: text; color: transparent; font-style: italic; }
 .hero-sub { font-size: 15px; line-height: 1.6; color: var(--text-2); max-width: 62ch; margin: 0; }
+.hero-toggle-row { margin-top: 20px; }
 .kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 @media (max-width: 520px) { .kpi-grid { grid-template-columns: 1fr 1fr; } }
 .kpi { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px 16px; backdrop-filter: blur(14px); position: relative; overflow: hidden; transition: border-color 0.3s ease, transform 0.3s ease; }
