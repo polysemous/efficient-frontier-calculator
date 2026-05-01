@@ -4,7 +4,7 @@ A React-based application for exploring portfolio optimization using Modern Port
 
 ## Live App
 
-Use the hosted version here:
+Use the hosted version here -- deployed to Google Cloud Run and auto-built from github:
 
 - [https://frontier.madsen7.com](https://frontier.madsen7.com)
 
