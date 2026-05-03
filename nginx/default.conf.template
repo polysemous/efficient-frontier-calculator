@@ -1,0 +1,21 @@
+server {
+    listen ${PORT};
+    listen [::]:${PORT};
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Return cheap 404s for obvious secret and repo probes instead of the SPA shell.
+    location ~* ^/(\.git(?:/|$)|\.env(?:$|[._~A-Za-z0-9-])|\.github(?:/|$)|\.git-credentials$|\.git-secret$|\.git-askpass\.sh$|\.terraform\.tfstate$|\.boto$|\.s3cfg$) {
+        return 404;
+    }
+
+    if ($arg_phpinfo = "1") {
+        return 404;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

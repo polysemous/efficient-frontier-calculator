@@ -56,26 +56,18 @@ npm run build
 npm run preview
 ```
 
-## Deploying To Cloud Run
+## Cloud Run deployment
 
-This repo now includes a root [Dockerfile](/Users/kcmadsen/custom-apps/efficient-frontier-calculator/Dockerfile) for Cloud Run and Cloud Build.
-
-If your Cloud Run deploy is sourcing this GitHub repo directly, the previous error:
-
-```text
-unable to evaluate symlinks in Dockerfile path: lstat /workspace/Dockerfile: no such file or directory
-```
-
-happens when the build expects a root `Dockerfile` and none exists. With the new container files in place, Cloud Build can build the image from the repo root.
-
-Typical deploy command:
+This repo is ready for Cloud Run deployment with the included `Dockerfile`.
 
 ```bash
 gcloud run deploy efficient-frontier-calculator \
   --source . \
-  --region us-central1
+  --region us-central1 \
+  --allow-unauthenticated
 ```
 
+The container uses Nginx to serve the built Vite app and returns `404` for common secret and `.git` probe paths like `/.env` and `/.git/HEAD` instead of serving the SPA shell for them.
 ## Existing Features
 
 - Efficient frontier visualization
